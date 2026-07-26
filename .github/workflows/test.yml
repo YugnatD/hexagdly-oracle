@@ -1,0 +1,133 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Everything: both frameworks, hls4ml, upstream hexagdly -- the full
+  # picture, including test_cross_framework.py (needs both ports installed).
+  test-all:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: hexagdly-oracle
+
+      - uses: actions/checkout@v4
+        with:
+          repository: YugnatD/keras-hexagdly
+          path: keras-hexagdly
+
+      - uses: actions/checkout@v4
+        with:
+          repository: YugnatD/pytorch-hexagdly
+          path: pytorch-hexagdly
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install everything
+        run: |
+          pip install numpy pytest
+          pip install tensorflow-cpu
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install hexagdly hls4ml
+          pip install -e ./keras-hexagdly
+          pip install -e ./pytorch-hexagdly
+
+      - name: Run full suite
+        env:
+          PYTHONPATH: ${{ github.workspace }}/hexagdly-oracle/src
+        run: pytest hexagdly-oracle/tests/ -v
+
+  # Keras backend only, no hls4ml/torch -- catches accidental hard
+  # dependencies on the other framework being installed.
+  test-keras-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: hexagdly-oracle
+
+      - uses: actions/checkout@v4
+        with:
+          repository: YugnatD/keras-hexagdly
+          path: keras-hexagdly
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install keras side only
+        run: |
+          pip install numpy pytest tensorflow-cpu
+          pip install -e ./keras-hexagdly
+
+      - name: Run full suite (pytorch parts must skip, not error)
+        env:
+          PYTHONPATH: ${{ github.workspace }}/hexagdly-oracle/src
+        run: pytest hexagdly-oracle/tests/ -v
+
+  # Pytorch backend only, no keras -- same idea, the other direction.
+  test-pytorch-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: hexagdly-oracle
+
+      - uses: actions/checkout@v4
+        with:
+          repository: YugnatD/pytorch-hexagdly
+          path: pytorch-hexagdly
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pytorch side only
+        run: |
+          pip install numpy pytest
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ./pytorch-hexagdly
+
+      - name: Run full suite (keras parts must skip, not error)
+        env:
+          PYTHONPATH: ${{ github.workspace }}/hexagdly-oracle/src
+        run: pytest hexagdly-oracle/tests/ -v
+
+  # tests/test_oracle.py and test_hex_reference.py must work with nothing
+  # but numpy -- no framework at all.
+  test-no-framework:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package only
+        run: pip install numpy pytest
+      - name: Run framework-agnostic tests
+        run: pytest tests/test_oracle.py tests/test_hex_reference.py -v
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Ruff check
+        run: ruff check src/ tests/
+      - name: Ruff format check
+        run: ruff format --check src/ tests/

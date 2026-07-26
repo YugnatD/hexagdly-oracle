@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hexagdly-oracle"
+version = "0.3.0"
+description = "The physical home of the hexagdly test suite: ground-truth tables, oracle functions, hand-verified layer tests, share_neighbors checks, cross-framework agreement, and every keras-hexagdly-only test (hls4ml export, serialization, edge cases, etc.) that has nothing yet to share with pytorch-hexagdly but still lives here rather than being duplicated per-repo."
+requires-python = ">=3.9"
+dependencies = ["numpy"]
+
+# None of these are runtime dependencies of the package itself -- only needed
+# to actually RUN this package's own test suite. keras-hexagdly and
+# pytorch-hexagdly's own local test suites do NOT need any of these extras;
+# each repo keeps only what is currently impossible to run from here (nothing,
+# at present -- see each repo's tests/ for what little remains and why). Git
+# URLs point at "main".
+[project.optional-dependencies]
+layers-keras = [
+    "keras",
+    "tensorflow",
+    "torch",
+    "hexagdly",
+    "pytest",
+    "keras-hexagdly @ git+https://github.com/YugnatD/keras-hexagdly.git@main",
+]
+# Separate from layers-keras because it pulls in hls4ml (tier 2 / C-sim tests
+# additionally need Vitis HLS on PATH, but are skipped gracefully without it).
+layers-keras-hls4ml = [
+    "keras",
+    "tensorflow",
+    "hls4ml",
+    "pytest",
+    "keras-hexagdly @ git+https://github.com/YugnatD/keras-hexagdly.git@main",
+]
+layers-pytorch = [
+    "torch",
+    "pytest",
+    "pytorch-hexagdly @ git+https://github.com/YugnatD/pytorch-hexagdly.git@master",
+]
+cross-framework = [
+    "keras",
+    "tensorflow",
+    "torch",
+    "pytest",
+    "keras-hexagdly @ git+https://github.com/YugnatD/keras-hexagdly.git@main",
+    "pytorch-hexagdly @ git+https://github.com/YugnatD/pytorch-hexagdly.git@master",
+]
+all = [
+    "keras",
+    "tensorflow",
+    "torch",
+    "hexagdly",
+    "hls4ml",
+    "pytest",
+    "keras-hexagdly @ git+https://github.com/YugnatD/keras-hexagdly.git@main",
+    "pytorch-hexagdly @ git+https://github.com/YugnatD/pytorch-hexagdly.git@master",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
