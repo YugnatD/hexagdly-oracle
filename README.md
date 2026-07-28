@@ -2,7 +2,19 @@
 
 The single, physical home of the hexagdly test suite -- for both what's
 shared between `keras-hexagdly` and `pytorch-hexagdly`, and what currently
-only applies to one of them. Neither consuming repo keeps a local copy of
+only applies to one of them.
+
+The two libraries under test:
+
+- **[keras-hexagdly](https://github.com/YugnatD/keras-hexagdly)** — Keras 3 port
+  (any backend, channels-last), plus `share_neighbors`, `depth_padding` and
+  hls4ml/FPGA export.
+- **[pytorch-hexagdly](https://github.com/YugnatD/pytorch-hexagdly)** — PyTorch
+  fork of [ai4iacts/hexagdly](https://github.com/ai4iacts/hexagdly), plus
+  `share_neighbors`.
+
+Both consume this repo's tests from CI rather than vendoring them, so a change
+here is what actually gates their builds. Neither consuming repo keeps a local copy of
 test logic that lives here, even for keras-only content like hls4ml export:
 the point isn't just deduplication, it's having exactly one place a test for
 this family of libraries can be found, read, and fixed.

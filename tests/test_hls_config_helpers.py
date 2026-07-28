@@ -13,6 +13,7 @@ in keras-hexagdly:
   * MAC_BLOCK past ~512 makes Vitis duplicate the weight ROM instead of
     splitting it: measured 0 BRAM at 512 against 6080 at 1216.
 """
+
 import warnings
 
 import keras
@@ -28,21 +29,27 @@ from keras_hexagdly.hls4ml_ext import (
 
 hls4ml = pytest.importorskip("hls4ml")
 
-from keras_hexagdly.hls4ml_handler import register_hex_gather_layers
+from keras_hexagdly.hls4ml_handler import register_hex_gather_layers  # noqa: E402
 
-register_hex_gather_layers()   # config_from_keras_model needs the custom handlers
+register_hex_gather_layers()  # config_from_keras_model needs the custom handlers
 
 
 def _patched(kernel_size=2, cin=16, cout=32, hw=12, flatten=True):
     inp = keras.Input(shape=(hw, hw, cin), name="image")
-    x = hgly.Conv2d(out_channels=cout, kernel_size=kernel_size, stride=2,
-                    share_neighbors=False, bias=True, name="conv")(inp)
+    x = hgly.Conv2d(
+        out_channels=cout,
+        kernel_size=kernel_size,
+        stride=2,
+        share_neighbors=False,
+        bias=True,
+        name="conv",
+    )(inp)
     out = keras.layers.Flatten(name="flat")(x) if flatten else x
     return patch_model_for_hls(keras.Model(inp, out), strategy="linebuffer")
 
 
 def _hex_layers(model):
-    return [l for l in model.layers if hasattr(l, "mac_weights")]
+    return [layer for layer in model.layers if hasattr(layer, "mac_weights")]
 
 
 def test_recommended_reuse_factor_caps_mac_block():
@@ -67,7 +74,9 @@ def test_recommended_reuse_factor_ignores_plain_layers():
 
 def test_check_flags_known_bad_rtl_combination():
     model = _patched()
-    cfg = hls4ml.utils.config_from_keras_model(model, granularity="name", backend="Vivado")
+    cfg = hls4ml.utils.config_from_keras_model(
+        model, granularity="name", backend="Vivado"
+    )
     cfg["Model"]["Strategy"] = "Latency"
     cfg["Model"]["ReuseFactor"] = 1
     with warnings.catch_warnings(record=True):
@@ -81,10 +90,12 @@ def test_check_is_quiet_without_a_reshape_downstream():
     """The RTL failure needs a repack_stream-triggering layer; without one the
     Latency/RF=1 combination is legitimate and must not be flagged."""
     model = _patched(flatten=False)
-    cfg = hls4ml.utils.config_from_keras_model(model, granularity="name", backend="Vivado")
+    cfg = hls4ml.utils.config_from_keras_model(
+        model, granularity="name", backend="Vivado"
+    )
     cfg["Model"]["Strategy"] = "Latency"
     cfg["Model"]["ReuseFactor"] = 1
-    hex_reuse_config(cfg, model, verbose=False)   # keep MAC_BLOCK in range
+    hex_reuse_config(cfg, model, verbose=False)  # keep MAC_BLOCK in range
     with warnings.catch_warnings(record=True):
         warnings.simplefilter("always")
         issues = check_hls_config(cfg, model)
@@ -93,7 +104,9 @@ def test_check_is_quiet_without_a_reshape_downstream():
 
 def test_hex_reuse_config_clears_every_issue():
     model = _patched()
-    cfg = hls4ml.utils.config_from_keras_model(model, granularity="name", backend="Vivado")
+    cfg = hls4ml.utils.config_from_keras_model(
+        model, granularity="name", backend="Vivado"
+    )
     cfg["Model"]["Strategy"] = "Latency"
     cfg["Model"]["ReuseFactor"] = 1
     with warnings.catch_warnings(record=True):
@@ -107,9 +120,79 @@ def test_hex_reuse_config_clears_every_issue():
 
 def test_hex_reuse_config_leaves_recognised_layers_alone():
     model = _patched()
-    cfg = hls4ml.utils.config_from_keras_model(model, granularity="name", backend="Vivado")
-    before = {n: dict(d) for n, d in cfg["LayerName"].items()
-              if not any(l.name == n for l in _hex_layers(model))}
+    cfg = hls4ml.utils.config_from_keras_model(
+        model, granularity="name", backend="Vivado"
+    )
+    hex_names = {layer.name for layer in _hex_layers(model)}
+    before = {n: dict(d) for n, d in cfg["LayerName"].items() if n not in hex_names}
     hex_reuse_config(cfg, model, verbose=False)
     for name, entry in before.items():
         assert cfg["LayerName"][name] == entry
+
+
+def _sane_config(model):
+    """A config hex_reuse_config has already made valid, so the only thing left
+    for a test to observe is the guard itself."""
+    cfg = hls4ml.utils.config_from_keras_model(
+        model, granularity="name", backend="Vivado"
+    )
+    cfg["Model"]["Strategy"] = "Resource"
+    cfg["Model"]["ReuseFactor"] = 2
+    hex_reuse_config(cfg, model, verbose=False)
+    return cfg
+
+
+class TestSupportGuards:
+    """The 2D io_stream path is the one covered by RTL cosimulation; the others
+    pass C-simulation but are not something to build on. The guards make that
+    refusal explicit rather than leaving it to the README."""
+
+    def test_3d_layers_are_refused_by_default(self):
+        inp = keras.Input(shape=(4, 8, 8, 2))
+        model = keras.Model(inp, hgly.Conv3d(2, 4, kernel_size=1)(inp))
+        with pytest.raises(NotImplementedError, match="not a validated export path"):
+            patch_model_for_hls(model)
+
+    def test_3d_maxpool_is_refused_too(self):
+        inp = keras.Input(shape=(4, 8, 8, 2))
+        model = keras.Model(inp, hgly.MaxPool3d(kernel_size=1)(inp))
+        with pytest.raises(NotImplementedError):
+            patch_model_for_hls(model)
+
+    def test_3d_opt_out_works(self):
+        """The escape hatch has to actually work -- the 3D path passes csim, so
+        refusing it outright would remove usable (if unvalidated) function."""
+        inp = keras.Input(shape=(4, 8, 8, 2))
+        model = keras.Model(inp, hgly.Conv3d(2, 4, kernel_size=1)(inp))
+        assert patch_model_for_hls(model, allow_unvalidated=True) is not None
+
+    def test_2d_is_not_affected(self):
+        assert _patched() is not None
+
+    def test_io_parallel_is_refused_by_default(self):
+        model = _patched()
+        with pytest.raises(NotImplementedError, match="io_parallel|not a validated"):
+            check_hls_config({"Model": {}}, model, io_type="io_parallel")
+
+    def test_io_parallel_opt_out_works(self):
+        """The opt-out must let the call through; it may still report the usual
+        configuration warnings, which is a separate concern."""
+        model = _patched()
+        cfg = _sane_config(model)
+        assert (
+            check_hls_config(cfg, model, io_type="io_parallel", allow_unvalidated=True)
+            == []
+        )
+
+    def test_io_stream_is_the_default_and_passes(self):
+        model = _patched()
+        cfg = _sane_config(model)
+        assert check_hls_config(cfg, model) == []
+
+    def test_guard_messages_carry_the_measurement(self):
+        """Someone hitting these should learn why, not just that."""
+        inp = keras.Input(shape=(4, 8, 8, 2))
+        model = keras.Model(inp, hgly.Conv3d(2, 4, kernel_size=1)(inp))
+        with pytest.raises(NotImplementedError) as e:
+            patch_model_for_hls(model)
+        assert "cosimulation" in str(e.value) and "min" in str(e.value)

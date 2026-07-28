@@ -159,8 +159,10 @@ class TestMaxPool2dPatch:
         model = _build_2d_model(layer)
         x = -np.abs(RNG.standard_normal((1, H, W, CIN)).astype(np.float32))
         y_ref = model.predict(x, verbose=0)
-        patched = patch_model_for_hls(model)
+        patched = patch_model_for_hls(model, allow_unvalidated=True)
         assert np.max(np.abs(y_ref - patched.predict(x, verbose=0))) < 1e-5
+
+
 class TestConv3dPatch:
     @pytest.mark.parametrize("share", [False, True])
     @pytest.mark.parametrize("kernel_size", [(1, 1), (2, 2)])
@@ -180,7 +182,7 @@ class TestConv3dPatch:
         x = RNG.standard_normal((1, D, H, W, CIN)).astype(np.float32)
         y_ref = model.predict(x, verbose=0)
 
-        patched = patch_model_for_hls(model)
+        patched = patch_model_for_hls(model, allow_unvalidated=True)
         y_pat = patched.predict(x, verbose=0)
 
         assert y_ref.shape == y_pat.shape, f"shape: ref={y_ref.shape} pat={y_pat.shape}"
@@ -197,8 +199,9 @@ class TestConv3dPatch:
         _rand_weights(layer)
         x = RNG.standard_normal((1, D, H, W, CIN)).astype(np.float32)
         y_ref = model.predict(x, verbose=0)
-        patched = patch_model_for_hls(model)
+        patched = patch_model_for_hls(model, allow_unvalidated=True)
         assert np.max(np.abs(y_ref - patched.predict(x, verbose=0))) < ATOL_KERAS
+
 
 class TestPatchModelMisc:
     def test_non_model_raises(self):
@@ -260,6 +263,8 @@ class TestPatchedModelSerialization:
             f"{name}: save/load changed the output "
             f"(max err={np.max(np.abs(y_before - y_after)):.2e})"
         )
+
+
 @hls4ml_skip
 class TestHls4mlHandlerRegistration:
     def test_registration_is_idempotent(self):
@@ -281,6 +286,7 @@ class TestHls4mlHandlerRegistration:
         assert (
             hasattr(L, "layer_map") or True
         )  # registry is internal; just confirm no error
+
 
 @hls4ml_skip
 class TestHls4mlCsim:
@@ -528,7 +534,9 @@ class TestHls4mlCsim:
         x = RNG.standard_normal((1, D, H, W, CIN)).astype(np.float32)
         y_ref = model.predict(x, verbose=0).reshape(-1)
 
-        patched = patch_model_for_hls(model, strategy="linebuffer")
+        patched = patch_model_for_hls(
+            model, strategy="linebuffer", allow_unvalidated=True
+        )
         cfg = hls4ml.utils.config_from_keras_model(
             patched, granularity="name", backend="Vivado"
         )
@@ -614,6 +622,8 @@ class TestHls4mlCsim:
             f"expected accum_t {expected} (scale={scale} for K*Cin={k * cin}), "
             f"not found in generated config"
         )
+
+
 @jax_skip
 class TestConv2dLineBuffer:
     """Tier 1: fused HexConvLineBuffer output must match the original Conv2d."""
@@ -668,7 +678,9 @@ class TestConv3dLineBuffer:
 
         x = RNG.standard_normal((1, D, H, W, CIN)).astype(np.float32)
         y_ref = model.predict(x, verbose=0)
-        patched = patch_model_for_hls(model, strategy="linebuffer")
+        patched = patch_model_for_hls(
+            model, strategy="linebuffer", allow_unvalidated=True
+        )
         y_pat = patched.predict(x, verbose=0)
 
         assert y_ref.shape == y_pat.shape
@@ -713,7 +725,9 @@ class TestLineBufferSerialization:
         )
         model = _build_3d_model(layer)
         _rand_weights(layer)
-        patched = patch_model_for_hls(model, strategy="linebuffer")
+        patched = patch_model_for_hls(
+            model, strategy="linebuffer", allow_unvalidated=True
+        )
         x = RNG.standard_normal((1, D, H, W, CIN)).astype(np.float32)
         self._roundtrip(patched, x, tmp_path, f"lb3d_{depth_padding}")
 
@@ -772,7 +786,9 @@ class TestLineBufferCsim:
         x = RNG.standard_normal((1, D, H, W, CIN)).astype(np.float32) * 0.3
         y_ref = model.predict(x, verbose=0).reshape(-1)
 
-        patched = patch_model_for_hls(model, strategy="linebuffer")
+        patched = patch_model_for_hls(
+            model, strategy="linebuffer", allow_unvalidated=True
+        )
         y_hls = _csim(patched, x, io_type=io_type).reshape(-1)
         assert np.max(np.abs(y_hls - y_ref)) < ATOL_CSIM, (
             f"Conv3d linebuffer {io_type} dpad={depth_padding}: "
@@ -844,7 +860,9 @@ class TestMaxPoolLineBuffer:
         if neg:
             x = -np.abs(x)
         y_ref = model.predict(x, verbose=0)
-        y_pat = patch_model_for_hls(model, strategy="linebuffer").predict(x, verbose=0)
+        y_pat = patch_model_for_hls(
+            model, strategy="linebuffer", allow_unvalidated=True
+        ).predict(x, verbose=0)
         assert y_ref.shape == y_pat.shape
         assert np.max(np.abs(y_ref - y_pat)) < 1e-5, (
             f"MaxPool3d linebuffer(k={kernel_size},neg={neg}): "
@@ -856,7 +874,7 @@ class TestMaxPoolLineBuffer:
         layer = hgly.MaxPool3d(kernel_size=(1, 1), stride=(1, 2))
         model = _build_3d_model(layer)
         with pytest.raises(NotImplementedError, match="stride=1 only"):
-            patch_model_for_hls(model, strategy="linebuffer")
+            patch_model_for_hls(model, strategy="linebuffer", allow_unvalidated=True)
 
 
 @jax_skip
@@ -879,7 +897,9 @@ class TestPoolLineBufferSerialization:
     def test_pool3d_roundtrip(self, tmp_path):
         layer = hgly.MaxPool3d(kernel_size=(2, 1), name="p3")
         model = _build_3d_model(layer)
-        patched = patch_model_for_hls(model, strategy="linebuffer")
+        patched = patch_model_for_hls(
+            model, strategy="linebuffer", allow_unvalidated=True
+        )
         x = RNG.standard_normal((1, D, H, W, CIN)).astype(np.float32)
         self._roundtrip(patched, x, tmp_path, "lbpool3d")
 
@@ -1021,7 +1041,9 @@ class TestLineBufferPoolAndStrideCsim:
         model = _build_3d_model(layer)
         x = RNG.standard_normal((1, D, H, W, CIN)).astype(np.float32)
         y_ref = model.predict(x, verbose=0).reshape(-1)
-        patched = patch_model_for_hls(model, strategy="linebuffer")
+        patched = patch_model_for_hls(
+            model, strategy="linebuffer", allow_unvalidated=True
+        )
         y_hls = _csim(patched, x, io_type=io_type).reshape(-1)
         assert np.max(np.abs(y_hls - y_ref)) < ATOL_CSIM
 

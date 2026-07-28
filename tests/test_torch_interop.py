@@ -9,6 +9,7 @@ A mis-transposed weight loads without complaint and only shows up as degraded
 accuracy, so every test here compares against the PyTorch forward pass rather
 than just checking shapes.
 """
+
 import numpy as np
 import pytest
 
@@ -29,14 +30,27 @@ CIN, COUT, H, W = 3, 4, 9, 9
 
 def _keras_model(share=False, kernel_size=1, bias=True):
     inp = keras.Input(shape=(H, W, CIN), name="image")
-    out = hgly.Conv2d(CIN, COUT, kernel_size=kernel_size, stride=1, bias=bias,
-                      share_neighbors=share, name="conv")(inp)
+    out = hgly.Conv2d(
+        CIN,
+        COUT,
+        kernel_size=kernel_size,
+        stride=1,
+        bias=bias,
+        share_neighbors=share,
+        name="conv",
+    )(inp)
     return keras.Model(inp, out)
 
 
 def _torch_layer(share=None, kernel_size=1, bias=True):
-    layer = pth.Conv2d(in_channels=CIN, out_channels=COUT, kernel_size=kernel_size,
-                       stride=1, bias=bias, share_neighbors=share)
+    layer = pth.Conv2d(
+        in_channels=CIN,
+        out_channels=COUT,
+        kernel_size=kernel_size,
+        stride=1,
+        bias=bias,
+        share_neighbors=share,
+    )
     g = torch.Generator().manual_seed(0)
     for p in layer.parameters():
         with torch.no_grad():
@@ -89,14 +103,18 @@ def test_numpy_path_is_identical_to_torch_path(tmp_path):
     load_hex_conv2d_weights(km_numpy.get_layer("conv"), sd_np, prefix="")
 
     x = np.random.default_rng(2).standard_normal((2, H, W, CIN)).astype(np.float32)
-    assert np.array_equal(km_torch.predict(x, verbose=0), km_numpy.predict(x, verbose=0))
+    assert np.array_equal(
+        km_torch.predict(x, verbose=0), km_numpy.predict(x, verbose=0)
+    )
 
 
 def test_upstream_hexagdly_checkpoint_loads():
     """Upstream `hexagdly` names its parameters exactly like the fork does in
     the unshared case, so its checkpoints must load unchanged."""
     up = pytest.importorskip("hexagdly")
-    tl = up.Conv2d(in_channels=CIN, out_channels=COUT, kernel_size=1, stride=1, bias=True)
+    tl = up.Conv2d(
+        in_channels=CIN, out_channels=COUT, kernel_size=1, stride=1, bias=True
+    )
     g = torch.Generator().manual_seed(3)
     for p in tl.parameters():
         with torch.no_grad():
@@ -109,7 +127,7 @@ def test_upstream_hexagdly_checkpoint_loads():
 
 def test_shape_mismatch_is_reported_not_silent():
     tl = _torch_layer(None, kernel_size=1)
-    km = _keras_model(False, kernel_size=2)      # deliberately different geometry
+    km = _keras_model(False, kernel_size=2)  # deliberately different geometry
     with pytest.raises((ValueError, KeyError)):
         load_hex_conv2d_weights(km.get_layer("conv"), tl.state_dict(), prefix="")
 
@@ -123,6 +141,26 @@ def test_unmapped_weighted_layer_raises():
     tl = _torch_layer(None, 1)
     with pytest.raises(ValueError, match="random initialisation"):
         load_torch_state_dict(model, tl.state_dict(), mapping={"conv": ""})
+
+
+def test_verify_against_catches_a_wrong_layout():
+    """verify_against is the guard the docs call non-optional -- it must FAIL on
+    a model whose weights were left in PyTorch's layout, and pass once they are
+    transposed correctly."""
+    tl = _torch_layer(None, kernel_size=1)
+    km = _keras_model(False, kernel_size=1)
+    load_hex_conv2d_weights(km.get_layer("conv"), tl.state_dict(), prefix="")
+    x = np.random.default_rng(4).standard_normal((2, CIN, H, W)).astype(np.float32)
+    assert verify_against(km, tl, x) < 1e-4
+
+    # Now make the realistic mistake: reshape the PyTorch weight into the Keras
+    # shape without transposing it. Same element count, scrambled meaning --
+    # exactly what verify_against exists to catch.
+    raw = tl.state_dict()["kernel0"].detach().numpy()
+    target = km.get_layer("conv")._base_kernels[0]
+    km.get_layer("conv")._base_kernels[0].assign(raw.reshape(target.shape))
+    with pytest.raises(AssertionError, match="disagree"):
+        verify_against(km, tl, x)
 
 
 def test_to_numpy_accepts_both_forms():
