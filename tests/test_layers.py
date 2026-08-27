@@ -78,11 +78,11 @@ class _KerasBackend:
         self, in_channels, out_channels, kernel_size, stride, bias, debug=True
     ):
         return self.hgly.Conv2d(
-            in_channels, out_channels, kernel_size, stride, bias, debug=debug
+            out_channels, kernel_size, stride, bias, debug=debug
         )
 
     def build_conv2d_custom_kernel(self, sub_kernels, stride, bias_arg):
-        return self.hgly.Conv2d_CustomKernel(sub_kernels, stride=stride, bias=bias_arg)
+        return self.hgly.Conv2d_CustomKernel(sub_kernels, strides=stride, bias=bias_arg)
 
     def build_maxpool2d(self, kernel_size, stride):
         return self.hgly.MaxPool2d(kernel_size, stride)
@@ -109,7 +109,6 @@ class _KerasBackend:
         depth_padding="valid",
     ):
         return self.hgly.Conv3d(
-            in_channels,
             out_channels,
             kernel_size,
             stride,
@@ -120,7 +119,7 @@ class _KerasBackend:
         )
 
     def build_conv3d_custom_kernel(self, sub_kernels, stride, bias_arg):
-        return self.hgly.Conv3d_CustomKernel(sub_kernels, stride=stride, bias=bias_arg)
+        return self.hgly.Conv3d_CustomKernel(sub_kernels, strides=stride, bias=bias_arg)
 
     def build_maxpool3d(self, kernel_size, stride):
         return self.hgly.MaxPool3d(kernel_size, stride)
@@ -137,10 +136,9 @@ class _KerasBackend:
     def build_shared_conv2d(self, mode, kernel_size=1, stride=1):
         conv = self.hgly.Conv2d(
             1,
-            1,
             kernel_size=kernel_size,
-            stride=stride,
-            bias=False,
+            strides=stride,
+            use_bias=False,
             share_neighbors=mode,
         )
         _ = conv(self.keras.ops.zeros((1, 10, 10, 1)))  # trigger build()
@@ -148,7 +146,7 @@ class _KerasBackend:
 
     def build_noshare_conv2d(self, kernel_size=1, stride=1):
         conv = self.hgly.Conv2d(
-            1, 1, kernel_size=kernel_size, stride=stride, bias=False
+            1, kernel_size=kernel_size, strides=stride, use_bias=False
         )
         _ = conv(self.keras.ops.zeros((1, 10, 10, 1)))
         return conv
@@ -980,7 +978,7 @@ def test_depth_padding_invalid_value_raises(backend):
 @backend_param
 @pytest.mark.parametrize("kernel_size", [1, 2, 3])
 def test_minimum_viable_input_size_stride1(backend, kernel_size):
-    """stride=1 only needs H big enough to contain the kernel once."""
+    """strides=1 only needs H big enough to contain the kernel once."""
     H = 2 * kernel_size + 1
     W = 4
     x = np.random.randn(1, H, W, 1).astype(np.float32)

@@ -29,18 +29,17 @@ def _roundtrip_config(layer):
 @pytest.mark.parametrize("share_neighbors", [False, True])
 def test_conv2d_config_roundtrip(share_neighbors):
     layer = hgly.Conv2d(
-        in_channels=2,
-        out_channels=3,
+        filters=3,
         kernel_size=2,
-        stride=2,
-        bias=True,
+        strides=2,
+        use_bias=True,
         share_neighbors=share_neighbors,
     )
     clone = _roundtrip_config(layer)
-    assert clone.in_channels == layer.in_channels
-    assert clone.out_channels == layer.out_channels
+    assert clone.in_channels == layer.in_channels  # both None -- neither is built
+    assert clone.filters == layer.filters
     assert clone.kernel_size == layer.kernel_size
-    assert clone.stride == layer.stride
+    assert clone.strides == layer.strides
     assert clone.share_neighbors == layer.share_neighbors
 
 
@@ -48,10 +47,9 @@ def test_conv3d_config_roundtrip_includes_depth_padding():
     """depth_padding is new in this port -- make sure it survives get_config,
     since it's easy to forget when adding a new constructor argument."""
     layer = hgly.Conv3d(
-        in_channels=2,
-        out_channels=3,
+        filters=3,
         kernel_size=(3, 1),
-        stride=1,
+        strides=1,
         depth_padding="same",
     )
     clone = _roundtrip_config(layer)
@@ -60,7 +58,7 @@ def test_conv3d_config_roundtrip_includes_depth_padding():
 
 def test_custom_kernel_2d_config_roundtrip():
     subk = [np.ones((1, 1, 3, 1), np.float32), np.ones((1, 1, 2, 2), np.float32)]
-    layer = hgly.Conv2d_CustomKernel(sub_kernels=subk, stride=2, bias=np.array([0.5]))
+    layer = hgly.Conv2d_CustomKernel(sub_kernels=subk, strides=2, bias=np.array([0.5]))
     clone = _roundtrip_config(layer)
     assert clone.hexbase_stride == 2
     np.testing.assert_allclose(clone.kernel0.numpy(), layer.kernel0.numpy())
@@ -70,8 +68,8 @@ def test_full_model_save_load_roundtrip(tmp_path):
     """Save a tiny model using a keras_hexagdly layer to a .keras file and
     reload it: outputs must match exactly (weights + config both round-trip)."""
     x_in = keras.Input(shape=(9, 8, 2))
-    y = hgly.Conv2d(out_channels=3, kernel_size=2, stride=1, share_neighbors=True)(x_in)
-    y = hgly.MaxPool2d(kernel_size=1, stride=2)(y)
+    y = hgly.Conv2d(filters=3, kernel_size=2, strides=1, share_neighbors=True)(x_in)
+    y = hgly.MaxPool2d(kernel_size=1, strides=2)(y)
     model = keras.Model(x_in, y)
 
     x = np.random.randn(2, 9, 8, 2).astype(np.float32)
@@ -87,7 +85,7 @@ def test_full_model_save_load_roundtrip(tmp_path):
 
 def test_full_model_save_load_roundtrip_depth_padding(tmp_path):
     x_in = keras.Input(shape=(5, 9, 8, 2))
-    y = hgly.Conv3d(out_channels=3, kernel_size=(3, 1), stride=1, depth_padding="same")(
+    y = hgly.Conv3d(filters=3, kernel_size=(3, 1), strides=1, depth_padding="same")(
         x_in
     )
     model = keras.Model(x_in, y)

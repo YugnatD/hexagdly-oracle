@@ -31,11 +31,10 @@ CIN, COUT, H, W = 3, 4, 9, 9
 def _keras_model(share=False, kernel_size=1, bias=True):
     inp = keras.Input(shape=(H, W, CIN), name="image")
     out = hgly.Conv2d(
-        CIN,
         COUT,
         kernel_size=kernel_size,
-        stride=1,
-        bias=bias,
+        strides=1,
+        use_bias=bias,
         share_neighbors=share,
         name="conv",
     )(inp)
@@ -135,7 +134,7 @@ def test_shape_mismatch_is_reported_not_silent():
 def test_unmapped_weighted_layer_raises():
     """A layer left out of `mapping` would silently keep its random init."""
     inp = keras.Input(shape=(H, W, CIN))
-    x = hgly.Conv2d(CIN, COUT, kernel_size=1, stride=1, bias=True, name="conv")(inp)
+    x = hgly.Conv2d(COUT, kernel_size=1, strides=1, use_bias=True, name="conv")(inp)
     out = keras.layers.Dense(2, name="head")(x)
     model = keras.Model(inp, out)
     tl = _torch_layer(None, 1)

@@ -76,7 +76,7 @@ def test_conv2d(kernel_size, stride, H, W, Cin, Cout):
     rng = np.random.default_rng(0)
     x = rng.standard_normal((2, Cin, H, W)).astype(np.float32)
     tl = hexagdly.Conv2d(Cin, Cout, kernel_size=kernel_size, stride=stride, bias=True)
-    kl = hgly.Conv2d(Cin, Cout, kernel_size=kernel_size, stride=stride, bias=True)
+    kl = hgly.Conv2d(Cout, kernel_size=kernel_size, strides=stride, use_bias=True)
     _ = kl(keras.ops.zeros((1, H, W, Cin)))
     _copy_conv_weights_2d(tl, kl)
     to = tl(torch.from_numpy(x))
@@ -91,7 +91,7 @@ def test_conv3d(kernel_size, stride):
     D, H, W, Cin, Cout = 5, 9, 8, 2, 3
     x = rng.standard_normal((2, Cin, D, H, W)).astype(np.float32)
     tl = hexagdly.Conv3d(Cin, Cout, kernel_size=kernel_size, stride=stride, bias=True)
-    kl = hgly.Conv3d(Cin, Cout, kernel_size=kernel_size, stride=stride, bias=True)
+    kl = hgly.Conv3d(Cout, kernel_size=kernel_size, strides=stride, use_bias=True)
     _ = kl(keras.ops.zeros((1, D, H, W, Cin)))
     _copy_conv_weights_3d(tl, kl)
     to = tl(torch.from_numpy(x))
@@ -106,7 +106,7 @@ def test_maxpool2d(kernel_size, stride):
     H, W, C = 10, 9, 3
     x = rng.standard_normal((2, C, H, W)).astype(np.float32)
     tl = hexagdly.MaxPool2d(kernel_size=kernel_size, stride=stride)
-    kl = hgly.MaxPool2d(kernel_size=kernel_size, stride=stride)
+    kl = hgly.MaxPool2d(kernel_size=kernel_size, strides=stride)
     to = tl(torch.from_numpy(x))
     ko = kl(keras.ops.convert_to_tensor(_to_nhwc(x)))
     _assert_close(to, ko, 2)
@@ -119,7 +119,7 @@ def test_maxpool3d(kernel_size, stride):
     D, H, W, C = 6, 10, 9, 3
     x = rng.standard_normal((2, C, D, H, W)).astype(np.float32)
     tl = hexagdly.MaxPool3d(kernel_size=kernel_size, stride=stride)
-    kl = hgly.MaxPool3d(kernel_size=kernel_size, stride=stride)
+    kl = hgly.MaxPool3d(kernel_size=kernel_size, strides=stride)
     to = tl(torch.from_numpy(x))
     ko = kl(keras.ops.convert_to_tensor(_to_ndhwc(x)))
     _assert_close(to, ko, 3)
@@ -136,7 +136,7 @@ def test_custom_kernel_2d():
     H, W = 11, 9
     x = rng.standard_normal((2, 2, H, W)).astype(np.float32)
     tl = hexagdly.Conv2d_CustomKernel(sub_kernels=[s.copy() for s in subk], stride=1)
-    kl = hgly.Conv2d_CustomKernel(sub_kernels=[s.copy() for s in subk], stride=1)
+    kl = hgly.Conv2d_CustomKernel(sub_kernels=[s.copy() for s in subk], strides=1)
     to = tl(torch.from_numpy(x))
     ko = kl(keras.ops.convert_to_tensor(_to_nhwc(x)))
     _assert_close(to, ko, 2)
@@ -153,7 +153,7 @@ def test_custom_kernel_3d():
     D, H, W = 5, 11, 9
     x = rng.standard_normal((2, 2, D, H, W)).astype(np.float32)
     tl = hexagdly.Conv3d_CustomKernel(sub_kernels=[s.copy() for s in subk], stride=1)
-    kl = hgly.Conv3d_CustomKernel(sub_kernels=[s.copy() for s in subk], stride=1)
+    kl = hgly.Conv3d_CustomKernel(sub_kernels=[s.copy() for s in subk], strides=1)
     to = tl(torch.from_numpy(x))
     ko = kl(keras.ops.convert_to_tensor(_to_ndhwc(x)))
     _assert_close(to, ko, 3)
@@ -172,7 +172,7 @@ def test_conv2d_odd_even_widths(kernel_size, H, W):
     Cin, Cout = 2, 2
     x = rng.standard_normal((1, Cin, H, W)).astype(np.float32)
     tl = hexagdly.Conv2d(Cin, Cout, kernel_size=kernel_size, stride=1, bias=True)
-    kl = hgly.Conv2d(Cin, Cout, kernel_size=kernel_size, stride=1, bias=True)
+    kl = hgly.Conv2d(Cout, kernel_size=kernel_size, strides=1, use_bias=True)
     _ = kl(keras.ops.zeros((1, H, W, Cin)))
     _copy_conv_weights_2d(tl, kl)
     to = tl(torch.from_numpy(x))
@@ -187,7 +187,7 @@ def test_conv2d_large_strides(kernel_size, stride):
     H, W, Cin, Cout = 20, 17, 2, 3
     x = rng.standard_normal((2, Cin, H, W)).astype(np.float32)
     tl = hexagdly.Conv2d(Cin, Cout, kernel_size=kernel_size, stride=stride, bias=True)
-    kl = hgly.Conv2d(Cin, Cout, kernel_size=kernel_size, stride=stride, bias=True)
+    kl = hgly.Conv2d(Cout, kernel_size=kernel_size, strides=stride, use_bias=True)
     _ = kl(keras.ops.zeros((1, H, W, Cin)))
     _copy_conv_weights_2d(tl, kl)
     to = tl(torch.from_numpy(x))
@@ -204,7 +204,7 @@ def test_conv3d_asymmetric(kd, kh, sd, sh):
     D, H, W, Cin, Cout = 7, 9, 8, 2, 3
     x = rng.standard_normal((2, Cin, D, H, W)).astype(np.float32)
     tl = hexagdly.Conv3d(Cin, Cout, kernel_size=(kd, kh), stride=(sd, sh), bias=True)
-    kl = hgly.Conv3d(Cin, Cout, kernel_size=(kd, kh), stride=(sd, sh), bias=True)
+    kl = hgly.Conv3d(Cout, kernel_size=(kd, kh), strides=(sd, sh), use_bias=True)
     _ = kl(keras.ops.zeros((1, D, H, W, Cin)))
     _copy_conv_weights_3d(tl, kl)
     to = tl(torch.from_numpy(x))
@@ -227,7 +227,7 @@ def test_gradients_2d():
         x = rng.standard_normal((2, Cin, H, W)).astype(np.float32)
 
         tl = hexagdly.Conv2d(Cin, Cout, kernel_size=kernel_size, stride=1, bias=True)
-        kl = hgly.Conv2d(Cin, Cout, kernel_size=kernel_size, stride=1, bias=True)
+        kl = hgly.Conv2d(Cout, kernel_size=kernel_size, strides=1, use_bias=True)
         _ = kl(keras.ops.zeros((1, H, W, Cin)))
         _copy_conv_weights_2d(tl, kl)
 
@@ -265,7 +265,7 @@ def test_gradients_3d():
         D, H, W, Cin, Cout = 5, 9, 8, 2, 3
         x = rng.standard_normal((2, Cin, D, H, W)).astype(np.float32)
         tl = hexagdly.Conv3d(Cin, Cout, kernel_size=kernel_size, stride=1, bias=True)
-        kl = hgly.Conv3d(Cin, Cout, kernel_size=kernel_size, stride=1, bias=True)
+        kl = hgly.Conv3d(Cout, kernel_size=kernel_size, strides=1, use_bias=True)
         _ = kl(keras.ops.zeros((1, D, H, W, Cin)))
         _copy_conv_weights_3d(tl, kl)
 
@@ -294,7 +294,7 @@ def test_conv2d_no_bias(kernel_size, stride):
     H, W, Cin, Cout = 10, 9, 2, 3
     x = rng.standard_normal((2, Cin, H, W)).astype(np.float32)
     tl = hexagdly.Conv2d(Cin, Cout, kernel_size=kernel_size, stride=stride, bias=False)
-    kl = hgly.Conv2d(Cin, Cout, kernel_size=kernel_size, stride=stride, bias=False)
+    kl = hgly.Conv2d(Cout, kernel_size=kernel_size, strides=stride, use_bias=False)
     _ = kl(keras.ops.zeros((1, H, W, Cin)))
     _copy_conv_weights_2d(tl, kl)
     to = tl(torch.from_numpy(x))
@@ -308,7 +308,7 @@ def test_conv3d_no_bias(kernel_size):
     D, H, W, Cin, Cout = 5, 9, 8, 2, 3
     x = rng.standard_normal((2, Cin, D, H, W)).astype(np.float32)
     tl = hexagdly.Conv3d(Cin, Cout, kernel_size=kernel_size, stride=1, bias=False)
-    kl = hgly.Conv3d(Cin, Cout, kernel_size=kernel_size, stride=1, bias=False)
+    kl = hgly.Conv3d(Cout, kernel_size=kernel_size, strides=1, use_bias=False)
     _ = kl(keras.ops.zeros((1, D, H, W, Cin)))
     _copy_conv_weights_3d(tl, kl)
     to = tl(torch.from_numpy(x))
@@ -322,7 +322,7 @@ def test_many_channels(Cin, Cout):
     H, W = 10, 9
     x = rng.standard_normal((2, Cin, H, W)).astype(np.float32)
     tl = hexagdly.Conv2d(Cin, Cout, kernel_size=2, stride=1, bias=True)
-    kl = hgly.Conv2d(Cin, Cout, kernel_size=2, stride=1, bias=True)
+    kl = hgly.Conv2d(Cout, kernel_size=2, strides=1, use_bias=True)
     _ = kl(keras.ops.zeros((1, H, W, Cin)))
     _copy_conv_weights_2d(tl, kl)
     to = tl(torch.from_numpy(x))
@@ -344,7 +344,7 @@ def test_custom_kernel_2d_strided(stride):
     tl = hexagdly.Conv2d_CustomKernel(
         sub_kernels=[s.copy() for s in subk], stride=stride
     )
-    kl = hgly.Conv2d_CustomKernel(sub_kernels=[s.copy() for s in subk], stride=stride)
+    kl = hgly.Conv2d_CustomKernel(sub_kernels=[s.copy() for s in subk], strides=stride)
     to = tl(torch.from_numpy(x))
     ko = kl(keras.ops.convert_to_tensor(_to_nhwc(x)))
     _assert_close(to, ko, 2)
@@ -354,7 +354,7 @@ def test_batch_independence():
     """A batched call must equal stacking per-sample calls (no cross-sample leak)."""
     rng = np.random.default_rng(22)
     H, W, Cin, Cout = 11, 9, 2, 3
-    kl = hgly.Conv2d(Cin, Cout, kernel_size=2, stride=1, bias=True)
+    kl = hgly.Conv2d(Cout, kernel_size=2, strides=1, use_bias=True)
     _ = kl(keras.ops.zeros((1, H, W, Cin)))
     x = rng.standard_normal((4, H, W, Cin)).astype(np.float32)
     batched = keras.ops.convert_to_numpy(kl(keras.ops.convert_to_tensor(x)))
@@ -391,7 +391,7 @@ def test_share_neighbors_forward_compat_with_upstream():
         Cin, Cout, kernel_size=n, stride=1, bias=True, share_neighbors=True
     )
     kl = hgly.Conv2d(
-        Cin, Cout, kernel_size=n, stride=1, bias=True, share_neighbors=True
+        Cout, kernel_size=n, strides=1, use_bias=True, share_neighbors=True
     )
     _ = kl(keras.ops.zeros((1, H, W, Cin)))
     rw = (
@@ -418,7 +418,7 @@ def test_depth_padding_forward_compat_with_upstream():
         Cin, Cout, kernel_size=(kd, n), stride=1, bias=True, depth_padding="same"
     )
     kl = hgly.Conv3d(
-        Cin, Cout, kernel_size=(kd, n), stride=1, bias=True, depth_padding="same"
+        Cout, kernel_size=(kd, n), strides=1, use_bias=True, depth_padding="same"
     )
     _ = kl(keras.ops.zeros((1, D, H, W, Cin)))
     _copy_conv_weights_3d(tl, kl)

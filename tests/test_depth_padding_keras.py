@@ -41,15 +41,14 @@ def test_depth_padding_same_graph_matches_eager(share, kernel_size):
     """depth_padding='same' must run under model.predict (graph mode) and match
     the eager result.  Regression for the pad-then-column-split reorder crash.
 
-    Uses bias=False: a trailing bias-add happens to perturb the graph enough to
-    hide the shape mismatch, so bias=False is the configuration that actually
+    Uses use_bias=False: a trailing bias-add happens to perturb the graph enough to
+    hide the shape mismatch, so use_bias=False is the configuration that actually
     exercises the bug (and the one the original failing tests used)."""
     rng = np.random.default_rng(3)
     layer = hgly.Conv3d(
-        CIN,
         COUT,
         kernel_size=kernel_size,
-        bias=False,
+        use_bias=False,
         share_neighbors=share,
         depth_padding="same",
     )
@@ -69,9 +68,9 @@ def test_depth_padding_same_graph_matches_eager(share, kernel_size):
 def test_external_zeropad_before_conv3d_graph(kernel_size):
     """A user ZeroPadding3D feeding a hex Conv3d must also run under graph mode
     (same underlying laundering).  Compares against eager pad-then-conv.
-    bias=False, the configuration that actually triggers the bug."""
+    use_bias=False, the configuration that actually triggers the bug."""
     rng = np.random.default_rng(5)
-    layer = hgly.Conv3d(CIN, COUT, kernel_size=kernel_size, bias=False)
+    layer = hgly.Conv3d(COUT, kernel_size=kernel_size, use_bias=False)
     inp = keras.Input((D, H, W, CIN))
     padded = keras.layers.ZeroPadding3D(((0, 1), (0, 0), (0, 0)))(inp)
     model = keras.Model(inp, layer(padded))

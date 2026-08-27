@@ -39,9 +39,9 @@ def test_conv2d_per_layer_float16_policy(share_neighbors):
     mixed precision -- it shouldn't require touching global state."""
     x = np.random.randn(1, 9, 8, 2).astype(np.float32)
     layer = hgly.Conv2d(
-        out_channels=3,
+        filters=3,
         kernel_size=2,
-        stride=1,
+        strides=1,
         share_neighbors=share_neighbors,
         dtype="mixed_float16",
     )
@@ -59,7 +59,7 @@ def test_conv2d_per_layer_float16_policy(share_neighbors):
 def test_conv3d_depth_padding_same_per_layer_float16_policy():
     x = np.random.randn(1, 9, 9, 8, 2).astype(np.float32)
     layer = hgly.Conv3d(
-        out_channels=2, kernel_size=(3, 1), depth_padding="same", dtype="mixed_float16"
+        filters=2, kernel_size=(3, 1), depth_padding="same", dtype="mixed_float16"
     )
     out = layer(keras.ops.convert_to_tensor(x))
 
@@ -70,7 +70,7 @@ def test_conv3d_depth_padding_same_per_layer_float16_policy():
 
 def test_maxpool2d_per_layer_float16_policy():
     x = np.random.randn(1, 10, 9, 3).astype(np.float32)
-    layer = hgly.MaxPool2d(kernel_size=2, stride=1, dtype="mixed_float16")
+    layer = hgly.MaxPool2d(kernel_size=2, strides=1, dtype="mixed_float16")
     out = layer(keras.ops.convert_to_tensor(x))
     assert keras.backend.standardize_dtype(out.dtype) == "float16"
 
@@ -79,7 +79,7 @@ def test_conv2d_global_mixed_float16_policy(global_mixed_float16):
     """The deprecated-but-still-common global policy must also work, and
     must not be required to leave variables in float16 (it shouldn't)."""
     x = np.random.randn(1, 9, 8, 2).astype(np.float32)
-    layer = hgly.Conv2d(out_channels=3, kernel_size=2, stride=1)
+    layer = hgly.Conv2d(filters=3, kernel_size=2, strides=1)
     out = layer(keras.ops.convert_to_tensor(x))
 
     assert keras.backend.standardize_dtype(out.dtype) == "float16"
@@ -94,11 +94,11 @@ def test_float16_output_reasonably_close_to_float32(global_mixed_float16):
     x = rng.standard_normal((2, 9, 8, 2)).astype(np.float32)
 
     keras.mixed_precision.set_global_policy("float32")
-    layer_f32 = hgly.Conv2d(out_channels=3, kernel_size=2, stride=1, bias=True)
+    layer_f32 = hgly.Conv2d(filters=3, kernel_size=2, strides=1, use_bias=True)
     out_f32 = keras.ops.convert_to_numpy(layer_f32(keras.ops.convert_to_tensor(x)))
 
     keras.mixed_precision.set_global_policy("mixed_float16")
-    layer_f16 = hgly.Conv2d(out_channels=3, kernel_size=2, stride=1, bias=True)
+    layer_f16 = hgly.Conv2d(filters=3, kernel_size=2, strides=1, use_bias=True)
     _ = layer_f16(keras.ops.zeros((1, 9, 8, 2)))
     for i in range(layer_f16.hexbase_size + 1):
         layer_f16._base_kernels[i].assign(layer_f32._base_kernels[i].numpy())

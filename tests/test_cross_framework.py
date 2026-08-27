@@ -134,11 +134,10 @@ def test_conv2d_share_neighbors(mode, kernel_size, stride, H, W, Cin, Cout):
         share_neighbors=mode,
     )
     kl = hgly.Conv2d(
-        Cin,
         Cout,
         kernel_size=kernel_size,
-        stride=stride,
-        bias=True,
+        strides=stride,
+        use_bias=True,
         share_neighbors=mode,
     )
     _ = kl(keras.ops.zeros((1, H, W, Cin)))
@@ -165,8 +164,8 @@ def test_conv2d_share_neighbors(mode, kernel_size, stride, H, W, Cin, Cout):
 def test_conv2d_noshare(kernel_size, stride, H, W, Cin, Cout):
     """share_neighbors=False, cross-checked via the real forward pass -- needs
     no assumption about how the offset table behaves across strides (unlike a
-    stride>1 first-principles oracle built from stride=1-derived tables would;
-    see hexagdly-oracle's README "Scope: stride=1 only")."""
+    stride>1 first-principles oracle built from strides=1-derived tables would;
+    see hexagdly-oracle's README "Scope: strides=1 only")."""
     rng = np.random.default_rng(2)
     x = rng.standard_normal((2, Cin, H, W)).astype(np.float32)
     tl = ph.Conv2d(
@@ -178,11 +177,10 @@ def test_conv2d_noshare(kernel_size, stride, H, W, Cin, Cout):
         share_neighbors=None,
     )
     kl = hgly.Conv2d(
-        Cin,
         Cout,
         kernel_size=kernel_size,
-        stride=stride,
-        bias=True,
+        strides=stride,
+        use_bias=True,
         share_neighbors=False,
     )
     _ = kl(keras.ops.zeros((1, H, W, Cin)))
@@ -219,11 +217,10 @@ def test_conv3d_share_neighbors(mode, kernel_size, stride):
         share_neighbors=mode,
     )
     kl = hgly.Conv3d(
-        Cin,
         Cout,
         kernel_size=kernel_size,
-        stride=stride,
-        bias=True,
+        strides=stride,
+        use_bias=True,
         share_neighbors=mode,
     )
     _ = kl(keras.ops.zeros((1, D, H, W, Cin)))
@@ -259,11 +256,10 @@ def test_conv3d_noshare(kernel_size, stride):
         share_neighbors=None,
     )
     kl = hgly.Conv3d(
-        Cin,
         Cout,
         kernel_size=kernel_size,
-        stride=stride,
-        bias=True,
+        strides=stride,
+        use_bias=True,
         share_neighbors=False,
     )
     _ = kl(keras.ops.zeros((1, D, H, W, Cin)))

@@ -102,11 +102,10 @@ class TestConv2dPatch:
     @pytest.mark.parametrize("stride", [1, 2])
     def test_output_matches_original(self, share, kernel_size, stride):
         layer = hgly.Conv2d(
-            CIN,
             COUT,
             kernel_size=kernel_size,
-            stride=stride,
-            bias=False,
+            strides=stride,
+            use_bias=False,
             share_neighbors=share,
         )
         model = _build_2d_model(layer)
@@ -125,7 +124,7 @@ class TestConv2dPatch:
         )
 
     def test_with_bias(self):
-        layer = hgly.Conv2d(CIN, COUT, kernel_size=1, stride=1, bias=True)
+        layer = hgly.Conv2d(COUT, kernel_size=1, strides=1, use_bias=True)
         model = _build_2d_model(layer)
         _rand_weights(layer)
         x = RNG.standard_normal((1, H, W, CIN)).astype(np.float32)
@@ -139,7 +138,7 @@ class TestMaxPool2dPatch:
     @pytest.mark.parametrize("kernel_size", [1, 2])
     @pytest.mark.parametrize("stride", [1, 2])
     def test_output_matches_original(self, kernel_size, stride):
-        layer = hgly.MaxPool2d(kernel_size=kernel_size, stride=stride)
+        layer = hgly.MaxPool2d(kernel_size=kernel_size, strides=stride)
         model = _build_2d_model(layer)
 
         x = RNG.standard_normal((2, H, W, CIN)).astype(np.float32)
@@ -155,7 +154,7 @@ class TestMaxPool2dPatch:
 
     def test_all_negative_input(self):
         """Border 0-pads dominate for all-negative input — patched must match."""
-        layer = hgly.MaxPool2d(kernel_size=1, stride=1)
+        layer = hgly.MaxPool2d(kernel_size=1, strides=1)
         model = _build_2d_model(layer)
         x = -np.abs(RNG.standard_normal((1, H, W, CIN)).astype(np.float32))
         y_ref = model.predict(x, verbose=0)
@@ -169,10 +168,9 @@ class TestConv3dPatch:
     @pytest.mark.parametrize("depth_padding", ["valid", "same"])
     def test_output_matches_original(self, share, kernel_size, depth_padding):
         layer = hgly.Conv3d(
-            CIN,
             COUT,
             kernel_size=kernel_size,
-            bias=False,
+            use_bias=False,
             share_neighbors=share,
             depth_padding=depth_padding,
         )
@@ -193,7 +191,7 @@ class TestConv3dPatch:
 
     def test_with_bias(self):
         layer = hgly.Conv3d(
-            CIN, COUT, kernel_size=(1, 1), bias=True, depth_padding="valid"
+            COUT, kernel_size=(1, 1), use_bias=True, depth_padding="valid"
         )
         model = _build_3d_model(layer)
         _rand_weights(layer)
@@ -209,7 +207,7 @@ class TestPatchModelMisc:
             patch_model_for_hls("not_a_model")
 
     def test_invalid_strategy_raises(self):
-        layer = hgly.Conv2d(CIN, COUT, kernel_size=1, bias=False)
+        layer = hgly.Conv2d(COUT, kernel_size=1, use_bias=False)
         model = _build_2d_model(layer)
         with pytest.raises(ValueError, match="Unknown strategy"):
             patch_model_for_hls(model, strategy="invalid")
@@ -217,7 +215,7 @@ class TestPatchModelMisc:
     def test_non_hex_layers_passthrough(self):
         """Non-hex layers (Dense, ReLU) must be preserved unchanged."""
         inp = keras.Input((H, W, CIN))
-        x = hgly.Conv2d(CIN, COUT, kernel_size=1, bias=False)(inp)
+        x = hgly.Conv2d(COUT, kernel_size=1, use_bias=False)(inp)
         x = keras.layers.Activation("relu")(x)
         model = keras.Model(inp, x)
         for w in model.trainable_variables:
@@ -231,7 +229,7 @@ class TestPatchModelMisc:
     def test_multi_layer_model(self):
         """Two hex layers in sequence both get replaced correctly."""
         inp = keras.Input((H, W, CIN))
-        x = hgly.Conv2d(CIN, COUT, kernel_size=1, bias=False)(inp)
+        x = hgly.Conv2d(COUT, kernel_size=1, use_bias=False)(inp)
         x = hgly.MaxPool2d(kernel_size=1)(x)
         model = keras.Model(inp, x)
         for w in model.trainable_variables:
@@ -295,7 +293,7 @@ class TestHls4mlCsim:
         global _HLS_DIR
         _HLS_DIR = str(tmp_path / "hls_conv2d_folded")
 
-        layer = hgly.Conv2d(CIN, COUT, kernel_size=1, bias=False)
+        layer = hgly.Conv2d(COUT, kernel_size=1, use_bias=False)
         model = _build_2d_model(layer)
         _rand_weights(layer)
 
@@ -339,7 +337,7 @@ class TestHls4mlCsim:
         global _HLS_DIR
         _HLS_DIR = str(tmp_path / f"hls_rf{reuse}")
 
-        layer = hgly.Conv2d(CIN, COUT, kernel_size=1, bias=False, share_neighbors=True)
+        layer = hgly.Conv2d(COUT, kernel_size=1, use_bias=False, share_neighbors=True)
         model = _build_2d_model(layer)
         _rand_weights(layer)
 
@@ -402,7 +400,7 @@ class TestHls4mlCsim:
         global _HLS_DIR
         _HLS_DIR = str(tmp_path / f"hls_pf{pf}")
 
-        layer = hgly.Conv2d(CIN, COUT, kernel_size=1, bias=False, share_neighbors=True)
+        layer = hgly.Conv2d(COUT, kernel_size=1, use_bias=False, share_neighbors=True)
         model = _build_2d_model(layer)
         _rand_weights(layer)
 
@@ -432,7 +430,7 @@ class TestHls4mlCsim:
         assert params_files, "parameters.h not generated"
         params_txt = "".join(open(p).read() for p in params_files)
 
-        n_out = H * W  # kernel_size=1, stride=1 -> N_out == N_in
+        n_out = H * W  # kernel_size=1, strides=1 -> N_out == N_in
         if n_out % pf == 0:
             expected_pf = pf
         else:
@@ -471,7 +469,7 @@ class TestHls4mlCsim:
         global _HLS_DIR
         _HLS_DIR = str(tmp_path / "hls_pf_pipeline")
 
-        layer = hgly.Conv2d(CIN, COUT, kernel_size=1, bias=False, share_neighbors=True)
+        layer = hgly.Conv2d(COUT, kernel_size=1, use_bias=False, share_neighbors=True)
         model = _build_2d_model(layer)
         _rand_weights(layer)
 
@@ -526,7 +524,7 @@ class TestHls4mlCsim:
         _HLS_DIR = str(tmp_path / f"hls_rf3d{reuse}")
 
         layer = hgly.Conv3d(
-            CIN, COUT, kernel_size=(1, 1), bias=False, share_neighbors=True
+            COUT, kernel_size=(1, 1), use_bias=False, share_neighbors=True
         )
         model = _build_3d_model(layer)
         _rand_weights(layer)
@@ -583,7 +581,7 @@ class TestHls4mlCsim:
         _HLS_DIR = str(tmp_path / f"hls_accum_k{kernel_size}_c{cin}")
 
         layer = hgly.Conv2d(
-            cin, 2, kernel_size=kernel_size, bias=False, share_neighbors=True
+            2, kernel_size=kernel_size, use_bias=False, share_neighbors=True
         )
         inp = keras.Input((H, W, cin), name="x")
         model = keras.Model(inp, layer(inp))
@@ -634,11 +632,10 @@ class TestConv2dLineBuffer:
     @pytest.mark.parametrize("bias", [False, True])
     def test_output_matches_original(self, share, kernel_size, stride, bias):
         layer = hgly.Conv2d(
-            CIN,
             COUT,
             kernel_size=kernel_size,
-            stride=stride,
-            bias=bias,
+            strides=stride,
+            use_bias=bias,
             share_neighbors=share,
         )
         model = _build_2d_model(layer)
@@ -651,7 +648,7 @@ class TestConv2dLineBuffer:
 
         assert y_ref.shape == y_pat.shape
         assert np.max(np.abs(y_ref - y_pat)) < ATOL_KERAS, (
-            f"Conv2d linebuffer(k={kernel_size},s={stride},share={share},bias={bias}): "
+            f"Conv2d linebuffer(k={kernel_size},s={stride},share={share},use_bias={bias}): "
             f"max err={np.max(np.abs(y_ref - y_pat)):.2e}"
         )
 
@@ -665,11 +662,10 @@ class TestConv3dLineBuffer:
     @pytest.mark.parametrize("depth_padding", ["valid", "same"])
     def test_output_matches_original(self, kernel_size, share, depth_padding):
         layer = hgly.Conv3d(
-            CIN,
             COUT,
             kernel_size=kernel_size,
-            stride=1,
-            bias=True,
+            strides=1,
+            use_bias=True,
             share_neighbors=share,
             depth_padding=depth_padding,
         )
@@ -704,7 +700,7 @@ class TestLineBufferSerialization:
     @pytest.mark.parametrize("share", [False, True])
     def test_conv2d_linebuffer_roundtrip(self, tmp_path, share):
         layer = hgly.Conv2d(
-            CIN, COUT, kernel_size=2, bias=True, share_neighbors=share, name="c1"
+            COUT, kernel_size=2, use_bias=True, share_neighbors=share, name="c1"
         )
         model = _build_2d_model(layer)
         _rand_weights(layer)
@@ -715,10 +711,9 @@ class TestLineBufferSerialization:
     @pytest.mark.parametrize("depth_padding", ["valid", "same"])
     def test_conv3d_linebuffer_roundtrip(self, tmp_path, depth_padding):
         layer = hgly.Conv3d(
-            CIN,
             COUT,
             kernel_size=(2, 1),
-            bias=True,
+            use_bias=True,
             share_neighbors=True,
             depth_padding=depth_padding,
             name="c3",
@@ -750,7 +745,7 @@ class TestLineBufferCsim:
         _HLS_DIR = str(tmp_path / f"lb2d_{io_type}_k{kernel_size}_s{share}")
 
         layer = hgly.Conv2d(
-            CIN, COUT, kernel_size=kernel_size, bias=True, share_neighbors=share
+            COUT, kernel_size=kernel_size, use_bias=True, share_neighbors=share
         )
         model = _build_2d_model(layer)
         _rand_weights(layer)
@@ -774,10 +769,9 @@ class TestLineBufferCsim:
         _HLS_DIR = str(tmp_path / f"lb3d_{io_type}_{depth_padding}")
 
         layer = hgly.Conv3d(
-            CIN,
             COUT,
             kernel_size=(2, 2),
-            bias=True,
+            use_bias=True,
             share_neighbors=True,
             depth_padding=depth_padding,
         )
@@ -806,7 +800,7 @@ class TestLineBufferCsim:
         global _HLS_DIR
         _HLS_DIR = str(tmp_path / "lb_stream_kernel")
 
-        layer = hgly.Conv2d(CIN, COUT, kernel_size=1, bias=False, share_neighbors=True)
+        layer = hgly.Conv2d(COUT, kernel_size=1, use_bias=False, share_neighbors=True)
         model = _build_2d_model(layer)
         _rand_weights(layer)
 
@@ -838,7 +832,7 @@ class TestMaxPoolLineBuffer:
     @pytest.mark.parametrize("stride", [1, 2])
     @pytest.mark.parametrize("neg", [False, True])
     def test_maxpool2d_matches_original(self, kernel_size, stride, neg):
-        layer = hgly.MaxPool2d(kernel_size=kernel_size, stride=stride)
+        layer = hgly.MaxPool2d(kernel_size=kernel_size, strides=stride)
         model = _build_2d_model(layer)
         x = RNG.standard_normal((2, H, W, CIN)).astype(np.float32)
         if neg:
@@ -871,9 +865,9 @@ class TestMaxPoolLineBuffer:
 
     def test_maxpool3d_hex_stride2_raises(self):
         """MaxPool3d linebuffer is hex-stride 1 only."""
-        layer = hgly.MaxPool3d(kernel_size=(1, 1), stride=(1, 2))
+        layer = hgly.MaxPool3d(kernel_size=(1, 1), strides=(1, 2))
         model = _build_3d_model(layer)
-        with pytest.raises(NotImplementedError, match="stride=1 only"):
+        with pytest.raises(NotImplementedError, match="strides=1 only"):
             patch_model_for_hls(model, strategy="linebuffer", allow_unvalidated=True)
 
 
@@ -888,7 +882,7 @@ class TestPoolLineBufferSerialization:
 
     @pytest.mark.parametrize("stride", [1, 2])
     def test_pool2d_roundtrip(self, tmp_path, stride):
-        layer = hgly.MaxPool2d(kernel_size=2, stride=stride, name="p1")
+        layer = hgly.MaxPool2d(kernel_size=2, strides=stride, name="p1")
         model = _build_2d_model(layer)
         patched = patch_model_for_hls(model, strategy="linebuffer")
         x = RNG.standard_normal((2, H, W, CIN)).astype(np.float32)
@@ -926,7 +920,7 @@ class TestLineBufferEdgeCasesCsim:
         global _HLS_DIR
         _HLS_DIR = str(tmp_path / "lb_border")
 
-        layer = hgly.Conv2d(CIN, COUT, kernel_size=1, bias=False, share_neighbors=False)
+        layer = hgly.Conv2d(COUT, kernel_size=1, use_bias=False, share_neighbors=False)
         model = _build_2d_model(layer)
         for w in layer.weights:
             w.assign(np.ones(w.shape, dtype=np.float32))
@@ -951,7 +945,7 @@ class TestLineBufferEdgeCasesCsim:
         global _HLS_DIR
         _HLS_DIR = str(tmp_path / "lb_ring")
 
-        shared = hgly.Conv2d(CIN, COUT, kernel_size=1, bias=False, share_neighbors=True)
+        shared = hgly.Conv2d(COUT, kernel_size=1, use_bias=False, share_neighbors=True)
         model_shared = _build_2d_model(shared)
         _rand_weights(shared)
         x = RNG.standard_normal((1, H, W, CIN)).astype(np.float32) * 0.3
@@ -970,7 +964,7 @@ class TestLineBufferEdgeCasesCsim:
         global _HLS_DIR
         _HLS_DIR = str(tmp_path / "lb_bias")
 
-        layer = hgly.Conv2d(CIN, COUT, kernel_size=1, bias=True, share_neighbors=False)
+        layer = hgly.Conv2d(COUT, kernel_size=1, use_bias=True, share_neighbors=False)
         model = _build_2d_model(layer)
         for w in layer.weights:
             if "bias" in w.name:
@@ -995,7 +989,7 @@ class TestLineBufferEdgeCasesCsim:
         global _HLS_DIR
         _HLS_DIR = str(tmp_path / "lb_negpool")
 
-        layer = hgly.MaxPool2d(kernel_size=1, stride=1)
+        layer = hgly.MaxPool2d(kernel_size=1, strides=1)
         model = _build_2d_model(layer)
         x = -np.abs(RNG.standard_normal((1, H, W, CIN)).astype(np.float32)) - 0.5
         y_ref = model.predict(x, verbose=0).reshape(-1)
@@ -1019,7 +1013,7 @@ class TestLineBufferPoolAndStrideCsim:
         global _HLS_DIR
         _HLS_DIR = str(tmp_path / f"lbpool2d_{io_type}_s{stride}")
 
-        layer = hgly.MaxPool2d(kernel_size=1, stride=stride)
+        layer = hgly.MaxPool2d(kernel_size=1, strides=stride)
         model = _build_2d_model(layer)
         x = -np.abs(
             RNG.standard_normal((1, H, W, CIN)).astype(np.float32)
@@ -1057,7 +1051,7 @@ class TestLineBufferPoolAndStrideCsim:
         _HLS_DIR = str(tmp_path / f"lbconv2d_s2_{io_type}_sh{share}")
 
         layer = hgly.Conv2d(
-            CIN, COUT, kernel_size=2, stride=2, bias=True, share_neighbors=share
+            COUT, kernel_size=2, strides=2, use_bias=True, share_neighbors=share
         )
         model = _build_2d_model(layer)
         _rand_weights(layer)

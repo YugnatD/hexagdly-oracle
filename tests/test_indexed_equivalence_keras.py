@@ -12,15 +12,15 @@ The flat-index convention throughout is m = h * W + w (raster scan):
 
 Coverage
 --------
-  Conv2d    x  {share=False, share=True} x {kernel=1,2,3} x {stride=1,2}
+  Conv2d    x  {share=False, share=True} x {kernel=1,2,3} x {strides=1,2}
               x  border pixels (every output pixel, not just center)
 
-  MaxPool2d x  {kernel=1,2,3} x {stride=1,2}  x  border pixels (all-neg input)
+  MaxPool2d x  {kernel=1,2,3} x {strides=1,2}  x  border pixels (all-neg input)
 
-  Conv3d    x  {share=False, share=True} x {kernel=(1,1),(2,2),(1,2)} x {stride=1,2}
+  Conv3d    x  {share=False, share=True} x {kernel=(1,1),(2,2),(1,2)} x {strides=1,2}
               x  border spatial pixels
 
-  MaxPool3d x  {kernel=(1,1),(2,2),(1,2)} x {stride=1,2}  x  all-neg input
+  MaxPool3d x  {kernel=(1,1),(2,2),(1,2)} x {strides=1,2}  x  all-neg input
 
 Documented single-backed exception (like hls4ml, of which this is actually
 part): the `keras_hexagdly.indexed` module IS the hls4ml export machinery
@@ -54,13 +54,12 @@ H, W = 13, 11  # moderately sized grid; odd W exercises parity path
 RNG = np.random.default_rng(42)
 
 
-def _make_conv2d(kernel_size, stride, share_neighbors, Cin=2, Cout=3):
+def _make_conv2d(kernel_size, strides, share_neighbors, Cin=2, Cout=3):
     layer = hgly.Conv2d(
-        Cin,
         Cout,
         kernel_size=kernel_size,
-        stride=stride,
-        bias=False,
+        strides=strides,
+        use_bias=False,
         share_neighbors=share_neighbors,
     )
     layer(keras.ops.zeros((1, H, W, Cin)))  # build
@@ -71,7 +70,7 @@ def _make_conv2d(kernel_size, stride, share_neighbors, Cin=2, Cout=3):
 
 
 def _make_maxpool2d(kernel_size, stride):
-    layer = hgly.MaxPool2d(kernel_size=kernel_size, stride=stride)
+    layer = hgly.MaxPool2d(kernel_size=kernel_size, strides=stride)
     layer(keras.ops.zeros((1, H, W, 1)))  # build
     return layer
 
@@ -109,7 +108,7 @@ def test_conv2d_indexed_equals_call(kernel_size, stride, share):
     )
     max_err = float(np.max(np.abs(y_idx - y_ref)))
     assert max_err < 1e-4, (
-        f"Conv2d(kernel={kernel_size}, stride={stride}, share={share}): "
+        f"Conv2d(kernel={kernel_size}, strides={stride}, share={share}): "
         f"max abs err={max_err:.2e} (expected < 1e-4)"
     )
 
@@ -137,7 +136,7 @@ def test_conv2d_border_pixels(kernel_size, stride, share):
 
     max_err = float(np.max(np.abs(y_idx - y_ref)))
     assert max_err < 1e-3, (
-        f"Border test Conv2d(kernel={kernel_size}, stride={stride}, share={share}): "
+        f"Border test Conv2d(kernel={kernel_size}, strides={stride}, share={share}): "
         f"max abs err={max_err:.2e}"
     )
 
@@ -164,7 +163,7 @@ def test_maxpool2d_indexed_equals_call(kernel_size, stride):
     assert y_idx.shape == y_ref.shape
     max_err = float(np.max(np.abs(y_idx - y_ref)))
     assert max_err < 1e-5, (
-        f"MaxPool2d(kernel={kernel_size}, stride={stride}): max abs err={max_err:.2e}"
+        f"MaxPool2d(kernel={kernel_size}, strides={stride}): max abs err={max_err:.2e}"
     )
 
 
@@ -188,7 +187,7 @@ def test_maxpool2d_border_pixels(kernel_size, stride):
 
     max_err = float(np.max(np.abs(y_idx - y_ref)))
     assert max_err < 1e-5, (
-        f"MaxPool2d border (all-neg) kernel={kernel_size}, stride={stride}: "
+        f"MaxPool2d border (all-neg) kernel={kernel_size}, strides={stride}: "
         f"max abs err={max_err:.2e}"
     )
 
@@ -200,7 +199,7 @@ def test_maxpool2d_border_pixels(kernel_size, stride):
 def test_neighbor_table_shape_and_sentinels(kernel_size):
     """neighbor_idx has the right shape and at least some -1 sentinels
     (border pixels), and all valid indices are in [0, H*W)."""
-    layer = _make_conv2d(kernel_size, stride=1, share_neighbors=False)
+    layer = _make_conv2d(kernel_size, strides=1, share_neighbors=False)
     nbr, cells, (H_out, W_out) = build_neighbor_table(layer, H, W)
 
     N_out = H_out * W_out
@@ -224,7 +223,7 @@ def test_parity_offset_tables_consistent_with_neighbor_idx(kernel_size, stride):
     # Bigger grid so strided outputs still have fully-interior pixels of each parity.
     Hb, Wb = 24, 22
     layer = hgly.Conv2d(
-        2, 3, kernel_size=kernel_size, stride=stride, bias=False, share_neighbors=False
+        3, kernel_size=kernel_size, strides=stride, use_bias=False, share_neighbors=False
     )
     layer(keras.ops.zeros((1, Hb, Wb, 2)))
     nbr, cells, (H_out, W_out) = build_neighbor_table(layer, Hb, Wb)
@@ -251,7 +250,7 @@ def test_parity_offset_tables_consistent_with_neighbor_idx(kernel_size, stride):
 
 def test_parity_offset_tables_reject_bad_out_dims():
     """H_out*W_out must equal N_out, else the offset builder refuses."""
-    layer = _make_conv2d(kernel_size=1, stride=1, share_neighbors=False)
+    layer = _make_conv2d(kernel_size=1, strides=1, share_neighbors=False)
     nbr, _, (H_out, W_out) = build_neighbor_table(layer, H, W)
     with pytest.raises(ValueError):
         build_parity_offset_tables(nbr, W, H_out + 1, W_out, 1)
@@ -266,11 +265,10 @@ D = 8  # depth dimension; small enough to keep tests fast
 
 def _make_conv3d(kernel_size, stride, share_neighbors, Cin=2, Cout=3):
     layer = hgly.Conv3d(
-        Cin,
         Cout,
         kernel_size=kernel_size,
-        stride=stride,
-        bias=False,
+        strides=stride,
+        use_bias=False,
         share_neighbors=share_neighbors,
     )
     layer(keras.ops.zeros((1, D, H, W, Cin)))
@@ -280,7 +278,7 @@ def _make_conv3d(kernel_size, stride, share_neighbors, Cin=2, Cout=3):
 
 
 def _make_maxpool3d(kernel_size, stride):
-    layer = hgly.MaxPool3d(kernel_size=kernel_size, stride=stride)
+    layer = hgly.MaxPool3d(kernel_size=kernel_size, strides=stride)
     layer(keras.ops.zeros((1, D, H, W, 1)))
     return layer
 
@@ -318,7 +316,7 @@ def test_conv3d_indexed_equals_call(kernel_size, stride, share):
     )
     max_err = float(np.max(np.abs(y_idx - y_ref)))
     assert max_err < 1e-3, (
-        f"Conv3d(kernel={kernel_size}, stride={stride}, share={share}): max abs err={max_err:.2e}"
+        f"Conv3d(kernel={kernel_size}, strides={stride}, share={share}): max abs err={max_err:.2e}"
     )
 
 
@@ -343,7 +341,7 @@ def test_conv3d_border_pixels(kernel_size, stride, share):
 
     max_err = float(np.max(np.abs(y_idx - y_ref)))
     assert max_err < 1e-2, (
-        f"Conv3d border kernel={kernel_size}, stride={stride}, share={share}: "
+        f"Conv3d border kernel={kernel_size}, strides={stride}, share={share}: "
         f"max abs err={max_err:.2e}"
     )
 
@@ -372,7 +370,7 @@ def test_maxpool3d_indexed_equals_call(kernel_size, stride):
     assert y_idx.shape == y_ref.shape
     max_err = float(np.max(np.abs(y_idx - y_ref)))
     assert max_err < 1e-5, (
-        f"MaxPool3d(kernel={kernel_size}, stride={stride}): max abs err={max_err:.2e}"
+        f"MaxPool3d(kernel={kernel_size}, strides={stride}): max abs err={max_err:.2e}"
     )
 
 
@@ -396,6 +394,6 @@ def test_maxpool3d_border_pixels(kernel_size, stride):
 
     max_err = float(np.max(np.abs(y_idx - y_ref)))
     assert max_err < 1e-5, (
-        f"MaxPool3d border (all-neg) kernel={kernel_size}, stride={stride}: "
+        f"MaxPool3d border (all-neg) kernel={kernel_size}, strides={stride}: "
         f"max abs err={max_err:.2e}"
     )

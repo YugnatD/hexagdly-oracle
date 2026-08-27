@@ -37,11 +37,11 @@ register_hex_gather_layers()  # config_from_keras_model needs the custom handler
 def _patched(kernel_size=2, cin=16, cout=32, hw=12, flatten=True):
     inp = keras.Input(shape=(hw, hw, cin), name="image")
     x = hgly.Conv2d(
-        out_channels=cout,
+        filters=cout,
         kernel_size=kernel_size,
-        stride=2,
+        strides=2,
         share_neighbors=False,
-        bias=True,
+        use_bias=True,
         name="conv",
     )(inp)
     out = keras.layers.Flatten(name="flat")(x) if flatten else x
@@ -149,7 +149,7 @@ class TestSupportGuards:
 
     def test_3d_layers_are_refused_by_default(self):
         inp = keras.Input(shape=(4, 8, 8, 2))
-        model = keras.Model(inp, hgly.Conv3d(2, 4, kernel_size=1)(inp))
+        model = keras.Model(inp, hgly.Conv3d(4, kernel_size=1)(inp))
         with pytest.raises(NotImplementedError, match="not a validated export path"):
             patch_model_for_hls(model)
 
@@ -163,7 +163,7 @@ class TestSupportGuards:
         """The escape hatch has to actually work -- the 3D path passes csim, so
         refusing it outright would remove usable (if unvalidated) function."""
         inp = keras.Input(shape=(4, 8, 8, 2))
-        model = keras.Model(inp, hgly.Conv3d(2, 4, kernel_size=1)(inp))
+        model = keras.Model(inp, hgly.Conv3d(4, kernel_size=1)(inp))
         assert patch_model_for_hls(model, allow_unvalidated=True) is not None
 
     def test_2d_is_not_affected(self):
@@ -192,7 +192,7 @@ class TestSupportGuards:
     def test_guard_messages_carry_the_measurement(self):
         """Someone hitting these should learn why, not just that."""
         inp = keras.Input(shape=(4, 8, 8, 2))
-        model = keras.Model(inp, hgly.Conv3d(2, 4, kernel_size=1)(inp))
+        model = keras.Model(inp, hgly.Conv3d(4, kernel_size=1)(inp))
         with pytest.raises(NotImplementedError) as e:
             patch_model_for_hls(model)
         assert "cosimulation" in str(e.value) and "min" in str(e.value)
