@@ -13,17 +13,17 @@ than just checking shapes.
 import numpy as np
 import pytest
 
-import keras
-import keras_hexagdly as hgly
-from keras_hexagdly.torch_interop import (
+keras = pytest.importorskip("keras")
+hgly = pytest.importorskip("keras_hexagdly")
+torch = pytest.importorskip("torch")
+pth = pytest.importorskip("pytorch_hexagdly")
+
+from keras_hexagdly.torch_interop import (  # noqa: E402
     load_hex_conv2d_weights,
     load_torch_state_dict,
     to_numpy,
     verify_against,
 )
-
-torch = pytest.importorskip("torch")
-pth = pytest.importorskip("pytorch_hexagdly")
 
 CIN, COUT, H, W = 3, 4, 9, 9
 

@@ -16,11 +16,11 @@ in keras-hexagdly:
 
 import warnings
 
-import keras
 import pytest
 
-import keras_hexagdly as hgly
-from keras_hexagdly.hls4ml_ext import (
+keras = pytest.importorskip("keras")
+hgly = pytest.importorskip("keras_hexagdly")
+from keras_hexagdly.hls4ml_ext import (  # noqa: E402
     check_hls_config,
     hex_reuse_config,
     patch_model_for_hls,
