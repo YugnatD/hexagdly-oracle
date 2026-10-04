@@ -240,6 +240,52 @@ class TestPatchModelMisc:
         patched = patch_model_for_hls(model)
         assert np.max(np.abs(y_ref - patched.predict(xd, verbose=0))) < ATOL_KERAS
 
+    def test_avgpool2d_is_refused(self):
+        """AvgPool2d has no export path: it must be refused up front rather
+        than reach hls4ml as an unknown custom layer."""
+        model = _build_2d_model(hgly.AvgPool2d(1))
+        with pytest.raises(NotImplementedError, match="AvgPool2d"):
+            patch_model_for_hls(model)
+
+
+@jax_skip
+class TestConv2dActivationPatch:
+    """A Conv2d/Conv3d ``activation`` is not part of the weights the
+    replacements are rebuilt from; patch_model_for_hls has to re-apply it."""
+
+    @pytest.mark.parametrize("strategy", ["linebuffer", "folded"])
+    @pytest.mark.parametrize("stride", [1, 2])
+    @pytest.mark.parametrize("activation", ["relu", "tanh"])
+    def test_output_matches_original(self, strategy, stride, activation):
+        layer = hgly.Conv2d(COUT, kernel_size=1, strides=stride, activation=activation)
+        model = _build_2d_model(layer)
+        _rand_weights(layer)
+
+        x = RNG.standard_normal((2, H, W, CIN)).astype(np.float32)
+        y_ref = model.predict(x, verbose=0)
+        if activation == "relu":
+            assert np.any(y_ref == 0)  # the activation really clips something
+
+        patched = patch_model_for_hls(model, strategy=strategy)
+        assert any(isinstance(lyr, keras.layers.Activation) for lyr in patched.layers)
+        assert np.max(np.abs(y_ref - patched.predict(x, verbose=0))) < ATOL_KERAS
+
+    def test_conv3d_activation_is_kept(self):
+        layer = hgly.Conv3d(COUT, kernel_size=(1, 1), activation="relu")
+        model = _build_3d_model(layer)
+        _rand_weights(layer)
+        x = RNG.standard_normal((1, D, H, W, CIN)).astype(np.float32)
+        y_ref = model.predict(x, verbose=0)
+        patched = patch_model_for_hls(model, allow_unvalidated=True)
+        assert np.max(np.abs(y_ref - patched.predict(x, verbose=0))) < ATOL_KERAS
+
+    def test_no_activation_adds_no_layer(self):
+        model = _build_2d_model(hgly.Conv2d(COUT, kernel_size=1))
+        patched = patch_model_for_hls(model)
+        assert not any(
+            isinstance(lyr, keras.layers.Activation) for lyr in patched.layers
+        )
+
 
 # =============================================================================
 # Serialization: patched (gather) models must save/load round-trip
@@ -756,6 +802,31 @@ class TestLineBufferCsim:
         y_hls = _csim(patched, x, io_type=io_type).reshape(-1)
         assert np.max(np.abs(y_hls - y_ref)) < ATOL_CSIM, (
             f"Conv2d linebuffer {io_type} k={kernel_size} share={share}: "
+            f"max err={np.max(np.abs(y_hls - y_ref)):.4f}"
+        )
+
+    @pytest.mark.parametrize("io_type", ["io_stream", "io_parallel"])
+    def test_conv2d_activation_csim(self, tmp_path, io_type):
+        """The re-applied activation must survive conversion and compilation,
+        not just the Keras-level graph rewrite."""
+        from keras_hexagdly.hls4ml_handler import register_hex_gather_layers
+
+        register_hex_gather_layers()
+        global _HLS_DIR
+        _HLS_DIR = str(tmp_path / f"lb2d_act_{io_type}")
+
+        layer = hgly.Conv2d(COUT, kernel_size=1, use_bias=True, activation="relu")
+        model = _build_2d_model(layer)
+        _rand_weights(layer)
+        x = RNG.standard_normal((1, H, W, CIN)).astype(np.float32) * 0.3
+        y_ref = model.predict(x, verbose=0).reshape(-1)
+        assert np.any(y_ref == 0)
+
+        patched = patch_model_for_hls(model, strategy="linebuffer")
+        y_hls = _csim(patched, x, io_type=io_type).reshape(-1)
+        assert y_hls.min() >= 0, "the ReLU was lost in the HLS model"
+        assert np.max(np.abs(y_hls - y_ref)) < ATOL_CSIM, (
+            f"Conv2d+relu linebuffer {io_type}: "
             f"max err={np.max(np.abs(y_hls - y_ref)):.4f}"
         )
 
