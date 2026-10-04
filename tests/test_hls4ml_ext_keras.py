@@ -10,12 +10,14 @@ Two tiers:
           quantization error (< 0.02 default precision).
 """
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 keras = pytest.importorskip("keras")
 hgly = pytest.importorskip("keras_hexagdly")
-from keras_hexagdly.hls4ml_ext import patch_model_for_hls  # noqa: E402
+from keras_hexagdly.hls4ml_ext import patch_model_for_hls
 
 # ---- test dimensions --------------------------------------------------------
 H, W = 13, 11
@@ -410,7 +412,7 @@ class TestHls4mlCsim:
 
         params_files = glob.glob(f"{_HLS_DIR}/**/parameters.h", recursive=True)
         assert params_files, "parameters.h not generated"
-        params_txt = "".join(open(p).read() for p in params_files)
+        params_txt = "".join(Path(p).read_text() for p in params_files)
         assert f"reuse_factor = {reuse}" in params_txt, (
             f"ReuseFactor={reuse} did not reach the hex conv config"
         )
@@ -474,7 +476,7 @@ class TestHls4mlCsim:
 
         params_files = glob.glob(f"{_HLS_DIR}/**/parameters.h", recursive=True)
         assert params_files, "parameters.h not generated"
-        params_txt = "".join(open(p).read() for p in params_files)
+        params_txt = "".join(Path(p).read_text() for p in params_files)
 
         n_out = H * W  # kernel_size=1, strides=1 -> N_out == N_in
         if n_out % pf == 0:
@@ -541,7 +543,7 @@ class TestHls4mlCsim:
         hm.compile()
 
         params_txt = "".join(
-            open(p).read()
+            Path(p).read_text()
             for p in glob.glob(f"{_HLS_DIR}/**/parameters.h", recursive=True)
         )
         n_out = H * W
@@ -599,7 +601,7 @@ class TestHls4mlCsim:
 
         params_files = glob.glob(f"{_HLS_DIR}/**/parameters.h", recursive=True)
         assert params_files, "parameters.h not generated"
-        params_txt = "".join(open(p).read() for p in params_files)
+        params_txt = "".join(Path(p).read_text() for p in params_files)
         assert f"reuse_factor = {reuse}" in params_txt, (
             f"ReuseFactor={reuse} did not reach the hex config"
         )
@@ -652,7 +654,7 @@ class TestHls4mlCsim:
         import math
 
         params_files = glob.glob(f"{_HLS_DIR}/**/parameters.h", recursive=True)
-        params_txt = "".join(open(p).read() for p in params_files)
+        params_txt = "".join(Path(p).read_text() for p in params_files)
 
         # Find the ring-MAC accum_t typedef and parse its integer bits.
         # K includes the center + rings for this kernel size.
@@ -883,7 +885,7 @@ class TestLineBufferCsim:
         )
 
         src = "".join(
-            open(p).read()
+            Path(p).read_text()
             for p in glob.glob(f"{_HLS_DIR}/**/*.cpp", recursive=True)
             + glob.glob(f"{_HLS_DIR}/**/parameters.h", recursive=True)
         )
@@ -1072,6 +1074,8 @@ class TestLineBufferEdgeCasesCsim:
         assert interior < 0.0, "interior pixel was clamped to the border pad value"
 
 
+@hls4ml_skip
+@jax_skip
 class TestLineBufferPoolAndStrideCsim:
     """Tier 2: pool line-buffer kernels + strided conv line-buffer must C-sim."""
 

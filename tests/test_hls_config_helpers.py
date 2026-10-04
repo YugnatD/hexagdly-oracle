@@ -20,7 +20,7 @@ import pytest
 
 keras = pytest.importorskip("keras")
 hgly = pytest.importorskip("keras_hexagdly")
-from keras_hexagdly.hls4ml_ext import (  # noqa: E402
+from keras_hexagdly.hls4ml_ext import (
     check_hls_config,
     hex_reuse_config,
     patch_model_for_hls,
@@ -29,7 +29,7 @@ from keras_hexagdly.hls4ml_ext import (  # noqa: E402
 
 hls4ml = pytest.importorskip("hls4ml")
 
-from keras_hexagdly.hls4ml_handler import register_hex_gather_layers  # noqa: E402
+from keras_hexagdly.hls4ml_handler import register_hex_gather_layers
 
 register_hex_gather_layers()  # config_from_keras_model needs the custom handlers
 

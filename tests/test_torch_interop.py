@@ -18,7 +18,7 @@ hgly = pytest.importorskip("keras_hexagdly")
 torch = pytest.importorskip("torch")
 pth = pytest.importorskip("pytorch_hexagdly")
 
-from keras_hexagdly.torch_interop import (  # noqa: E402
+from keras_hexagdly.torch_interop import (
     load_hex_conv2d_weights,
     load_torch_state_dict,
     to_numpy,

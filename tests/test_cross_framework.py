@@ -25,9 +25,9 @@ torch = pytest.importorskip("torch")
 hgly = pytest.importorskip("keras_hexagdly")
 ph = pytest.importorskip("pytorch_hexagdly")
 
-from keras_hexagdly.layers import SHARE_NEIGHBORS_MODES, weight_maps_2d  # noqa: E402
+from keras_hexagdly.layers import SHARE_NEIGHBORS_MODES, weight_maps_2d
 
-from hexagdly_oracle import HARDCODED_MAPS  # noqa: E402
+from hexagdly_oracle import HARDCODED_MAPS
 
 _RTOL, _ATOL = 1e-4, 1e-4
 

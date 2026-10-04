@@ -6,21 +6,21 @@ consuming repo's job (keras-hexagdly / pytorch-hexagdly test suites).
 """
 
 from hexagdly_oracle import (
-    DIAG_NEIGHBORS,
     DIAG2_NEIGHBORS,
-    NOSHARE_OFFSETS,
+    DIAG_NEIGHBORS,
     NOSHARE2_OFFSETS,
-    RING_NEIGHBORS,
+    NOSHARE_OFFSETS,
     RING2_NEIGHBORS,
-    SYM_NEIGHBORS,
+    RING_NEIGHBORS,
     SYM2_NEIGHBORS,
+    SYM_NEIGHBORS,
     oracle,
     oracle_k2,
     oracle_noshare,
 )
 from hexagdly_oracle.fixtures import (
-    GRID_LARGE,
     GRID_K2,
+    GRID_LARGE,
     GRID_SMALL,
     WEIGHTS_DIAG,
     WEIGHTS_DIAG2,

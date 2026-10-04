@@ -35,7 +35,7 @@ import pytest
 keras = pytest.importorskip("keras")
 hgly = pytest.importorskip("keras_hexagdly")
 
-from keras_hexagdly.indexed import (  # noqa: E402
+from keras_hexagdly.indexed import (
     build_neighbor_table,
     build_neighbor_table_3d,
     build_parity_offset_tables,
@@ -99,7 +99,7 @@ def test_conv2d_indexed_equals_call(kernel_size, stride, share):
     y_ref = _grid_to_flat(y_grid)  # (N_out, Cout)
 
     # indexed path
-    nbr, cells, (H_out, W_out) = build_neighbor_table(layer, H, W)
+    nbr, cells, (_H_out, _W_out) = build_neighbor_table(layer, H, W)
     W_k = get_cell_weights(layer, cells)  # (K, Cin, Cout)
     y_idx = indexed_conv2d_forward(x_flat, nbr, W_k)  # (N_out, Cout)
 
@@ -223,11 +223,15 @@ def test_parity_offset_tables_consistent_with_neighbor_idx(kernel_size, stride):
     # Bigger grid so strided outputs still have fully-interior pixels of each parity.
     Hb, Wb = 24, 22
     layer = hgly.Conv2d(
-        3, kernel_size=kernel_size, strides=stride, use_bias=False, share_neighbors=False
+        3,
+        kernel_size=kernel_size,
+        strides=stride,
+        use_bias=False,
+        share_neighbors=False,
     )
     layer(keras.ops.zeros((1, Hb, Wb, 2)))
     nbr, cells, (H_out, W_out) = build_neighbor_table(layer, Hb, Wb)
-    off_even, off_odd, rows_resident = build_parity_offset_tables(
+    off_even, off_odd, _rows_resident = build_parity_offset_tables(
         nbr, Wb, H_out, W_out, stride
     )
 
@@ -307,7 +311,7 @@ def test_conv3d_indexed_equals_call(kernel_size, stride, share):
     y_grid = keras.ops.convert_to_numpy(layer(keras.ops.convert_to_tensor(x_grid)))
     y_ref = _grid3d_to_flat(y_grid)  # (D_out, N_out, Cout)
 
-    nbr, cells, (D_out, H_out, W_out) = build_neighbor_table_3d(layer, D, H, W)
+    nbr, cells, (_D_out, _H_out, _W_out) = build_neighbor_table_3d(layer, D, H, W)
     W_k = get_cell_weights_3d(layer, cells)  # (D_kernel, K, Cin, Cout)
     y_idx = indexed_conv3d_forward(x_flat, nbr, W_k, depth_stride=depth_stride)
 

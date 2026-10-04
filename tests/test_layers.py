@@ -20,14 +20,30 @@ import numpy as np
 import pytest
 
 from hexagdly_oracle import (
-    DIAG_NEIGHBORS as _DIAG_NEIGHBORS,
     DIAG2_NEIGHBORS as _DIAG2_NEIGHBORS,
-    NOSHARE_OFFSETS as _NOSHARE_OFFSETS,
+)
+from hexagdly_oracle import (
+    DIAG_NEIGHBORS as _DIAG_NEIGHBORS,
+)
+from hexagdly_oracle import (
     NOSHARE2_OFFSETS as _NOSHARE2_OFFSETS,
-    RING_NEIGHBORS as _RING_NEIGHBORS,
+)
+from hexagdly_oracle import (
+    NOSHARE_OFFSETS as _NOSHARE_OFFSETS,
+)
+from hexagdly_oracle import (
     RING2_NEIGHBORS as _RING2_NEIGHBORS,
-    SYM_NEIGHBORS as _SYM_NEIGHBORS,
+)
+from hexagdly_oracle import (
+    RING_NEIGHBORS as _RING_NEIGHBORS,
+)
+from hexagdly_oracle import (
     SYM2_NEIGHBORS as _SYM2_NEIGHBORS,
+)
+from hexagdly_oracle import (
+    SYM_NEIGHBORS as _SYM_NEIGHBORS,
+)
+from hexagdly_oracle import (
     conv2d_expected,
     conv2d_input_nhwc,
     conv3d_expected,
@@ -37,8 +53,14 @@ from hexagdly_oracle import (
     maxpool2d_expected,
     maxpool2d_input_nhwc,
     maxpool3d_expected,
+)
+from hexagdly_oracle import (
     oracle as _oracle,
+)
+from hexagdly_oracle import (
     oracle_k2 as _oracle_k2,
+)
+from hexagdly_oracle import (
     oracle_noshare as _oracle_noshare,
 )
 from hexagdly_oracle.fixtures import (
@@ -55,7 +77,6 @@ from hexagdly_oracle.fixtures import (
     WEIGHTS_SYM2,
 )
 from hexagdly_oracle.testing import check_grid as _check_grid
-
 
 # =============================================================================
 # Per-framework adapters. Every test below is written once against this
@@ -77,9 +98,7 @@ class _KerasBackend:
     def build_conv2d(
         self, in_channels, out_channels, kernel_size, stride, bias, debug=True
     ):
-        return self.hgly.Conv2d(
-            out_channels, kernel_size, stride, bias, debug=debug
-        )
+        return self.hgly.Conv2d(out_channels, kernel_size, stride, bias, debug=debug)
 
     def build_conv2d_custom_kernel(self, sub_kernels, stride, bias_arg):
         return self.hgly.Conv2d_CustomKernel(sub_kernels, strides=stride, bias=bias_arg)
@@ -224,8 +243,8 @@ class _PytorchBackend:
     name = "pytorch"
 
     def __init__(self):
-        import torch
         import pytorch_hexagdly as hex
+        import torch
 
         self.torch = torch
         self.hex = hex
