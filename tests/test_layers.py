@@ -106,6 +106,9 @@ class _KerasBackend:
     def build_maxpool2d(self, kernel_size, stride):
         return self.hgly.MaxPool2d(kernel_size, stride)
 
+    def build_avgpool2d(self, kernel_size, stride):
+        return self.hgly.AvgPool2d(kernel_size, stride)
+
     def run_nhwc(self, layer, x_nhwc):
         out = layer(self.keras.ops.convert_to_tensor(x_nhwc))
         return self.keras.ops.convert_to_numpy(out)
@@ -278,6 +281,9 @@ class _PytorchBackend:
 
     def build_maxpool2d(self, kernel_size, stride):
         return self.hex.MaxPool2d(kernel_size, stride)
+
+    def build_avgpool2d(self, kernel_size, stride):
+        return self.hex.AvgPool2d(kernel_size, stride)
 
     def run_nhwc(self, layer, x_nhwc):
         out = layer(self.torch.FloatTensor(self._to_nchw(x_nhwc))).detach().numpy()
@@ -620,6 +626,115 @@ def test_maxpool3d_hand_verified(backend, in_channels, depth, kd, kh, sd, sh):
     out = backend.run_ndhwc(layer, x)
 
     np.testing.assert_allclose(out, expected, rtol=5e-4, atol=1e-2)
+
+
+# =============================================================================
+# AvgPool2d against the oracle mean
+#
+# Upstream HexagDLy only provides max pooling, so there is no hand-verified
+# table here. The ground truth is this package's own first-principles oracle:
+# with every weight set to 1, oracle()/oracle_k2() sum each window over its
+# in-grid cells only, so oracle(image) / oracle(ones) is exactly the in-grid
+# mean AvgPool2d is documented to compute -- derived from the measured
+# geometry tables, not from AvgPool2d's own code path.
+#
+# The oracle is stride=1 only. Strided outputs are checked by sampling the
+# stride-1 oracle mean at the strided output positions, using a
+# Conv2d_CustomKernel whose only non-zero tap is the window centre.
+# =============================================================================
+
+_AVG_RNG = np.random.default_rng(11)
+_AVG_ATOL = 1e-5
+
+# Every group weight set to 1 turns the oracles into in-grid window sums.
+_WINDOW_SUM = {
+    1: (_oracle, _RING_NEIGHBORS, {0: 1.0, 1: 1.0}),
+    2: (_oracle_k2, _RING2_NEIGHBORS, {0: 1.0, 1: 1.0, 2: 1.0}),
+}
+
+# Odd and even widths, plus grids narrower than a kernel_size=2 window and a
+# single column (see both ports' narrow-grid fix: keras-hexagdly 0.5.0,
+# pytorch-hexagdly 0.3.0).
+_AVG_SHAPES = [(7, 8), (9, 9), (6, 5), (8, 3), (4, 2), (5, 1)]
+
+
+def _oracle_mean(image, kernel_size):
+    fn, table, weights = _WINDOW_SUM[kernel_size]
+    total = np.array(fn(image.tolist(), weights, table))
+    count = np.array(fn(np.ones_like(image).tolist(), weights, table))
+    return total / count
+
+
+def _avgpool(backend, image_hwc, kernel_size, stride=1):
+    layer = backend.build_avgpool2d(kernel_size, stride)
+    return backend.run_nhwc(layer, image_hwc[None].astype("float32"))[0]
+
+
+def _centre_sampler(backend, stride):
+    """Picks each strided output position's centre cell from its input."""
+    centre = np.zeros((1, 1, 3, 1), "float32")
+    centre[0, 0, 1, 0] = 1.0
+    return backend.build_conv2d_custom_kernel(
+        [centre, np.zeros((1, 1, 2, 2), "float32")], stride, None
+    )
+
+
+@backend_param
+@pytest.mark.parametrize("kernel_size", [1, 2])
+@pytest.mark.parametrize("shape", _AVG_SHAPES)
+def test_avgpool2d_matches_the_oracle_mean(backend, kernel_size, shape):
+    image = _AVG_RNG.standard_normal(shape).astype("float32")
+    got = _avgpool(backend, image[:, :, None], kernel_size)[:, :, 0]
+    np.testing.assert_allclose(got, _oracle_mean(image, kernel_size), atol=_AVG_ATOL)
+
+
+@backend_param
+@pytest.mark.parametrize("kernel_size", [1, 2])
+def test_avgpool2d_channels_are_pooled_independently(backend, kernel_size):
+    image = _AVG_RNG.standard_normal((7, 8, 3)).astype("float32")
+    got = _avgpool(backend, image, kernel_size)
+    for c in range(3):
+        np.testing.assert_allclose(
+            got[:, :, c], _oracle_mean(image[:, :, c], kernel_size), atol=_AVG_ATOL
+        )
+
+
+@backend_param
+@pytest.mark.parametrize("kernel_size", [1, 2])
+@pytest.mark.parametrize("stride", [2, 3])
+@pytest.mark.parametrize("shape", [(7, 8), (9, 9), (6, 5), (8, 11)])
+def test_avgpool2d_strided_matches_the_oracle_mean_at_the_strided_positions(
+    backend, kernel_size, stride, shape
+):
+    image = _AVG_RNG.standard_normal(shape).astype("float32")
+    stride1_mean = _oracle_mean(image, kernel_size).astype("float32")
+    expected = backend.run_nhwc(
+        _centre_sampler(backend, stride), stride1_mean[None, :, :, None]
+    )
+    got = _avgpool(backend, image[:, :, None], kernel_size, stride)
+    assert got.shape == expected.shape[1:]
+    np.testing.assert_allclose(got, expected[0], atol=_AVG_ATOL)
+
+
+@backend_param
+@pytest.mark.parametrize("kernel_size", [1, 2])
+@pytest.mark.parametrize("stride", [1, 2, 3])
+@pytest.mark.parametrize("shape", [(7, 8), (6, 5), (5, 3), (4, 2), (5, 1)])
+def test_avgpool2d_constant_image_stays_constant(backend, kernel_size, stride, shape):
+    """Holds at the border only if the divisor counts exactly the in-grid
+    cells -- including grids no wider than the stride."""
+    got = _avgpool(backend, np.full(shape + (1,), 2.5, "float32"), kernel_size, stride)
+    np.testing.assert_allclose(got, 2.5, rtol=1e-6)
+
+
+@backend_param
+@pytest.mark.parametrize("stride", [1, 2, 3])
+def test_avgpool2d_output_grid_matches_maxpool2d(backend, stride):
+    """Same window walk as MaxPool2d, so the same output grid."""
+    x = _AVG_RNG.standard_normal((1, 9, 8, 2)).astype("float32")
+    avg = backend.run_nhwc(backend.build_avgpool2d(2, stride), x)
+    mx = backend.run_nhwc(backend.build_maxpool2d(2, stride), x)
+    assert avg.shape == mx.shape
 
 
 # =============================================================================
