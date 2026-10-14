@@ -738,6 +738,91 @@ def test_avgpool2d_output_grid_matches_maxpool2d(backend, stride):
 
 
 # =============================================================================
+# kernel_size=0 (pointwise): a plain per-cell channel projection, no
+# neighbours at all -- 0 hexagonal rings. Added to both ports together with
+# kernel_size_unit (see https://github.com/ctlearn-project/ctlearn/issues/302),
+# which needs it to express a true 1x1 ("pixels" unit, kernel_size=1).
+#
+# No neighbour table applies at radius 0, so there is nothing for the
+# share_neighbors oracle's hand-verified tables to check here. The ground
+# truth instead comes from what "no neighbours, no padding" means directly:
+# with debug weights (all 1s, bias 1), every output cell is the exact
+# channel sum of that same input cell plus bias, with no border effect at
+# all (unlike kernel_size>=1, which undercounts at the border) -- checked
+# identically on both ports, so this also serves as their cross-framework
+# agreement check for the pointwise case.
+# =============================================================================
+
+_POINTWISE_RNG = np.random.default_rng(13)
+
+
+@backend_param
+def test_pointwise_debug_weights_give_the_exact_channel_sum_everywhere(backend):
+    image = _POINTWISE_RNG.standard_normal((1, 9, 8, 3)).astype("float32")
+    layer = backend.build_conv2d(3, 1, kernel_size=0, stride=1, bias=True, debug=True)
+    out = backend.run_nhwc(layer, image)[..., 0]
+    np.testing.assert_allclose(out, image.sum(axis=-1) + 1.0, atol=1e-5)
+
+
+@backend_param
+@pytest.mark.parametrize("stride", [1, 2, 3])
+def test_pointwise_strided_output_is_a_subset_of_the_input(backend, stride):
+    """A pointwise conv only ever subsamples, whatever the stride: every
+    output value (debug weights, no bias) is the channel sum of some single
+    input cell, never a combination of several."""
+    image = _POINTWISE_RNG.standard_normal((1, 9, 8, 3)).astype("float32")
+    layer = backend.build_conv2d(
+        3, 1, kernel_size=0, stride=stride, bias=False, debug=True
+    )
+    out = backend.run_nhwc(layer, image)[..., 0]
+    possible_sums = image.sum(axis=-1)
+    for value in out.ravel():
+        assert np.any(np.isclose(possible_sums, value, atol=1e-5))
+
+
+@backend_param
+def test_maxpool2d_and_avgpool2d_kernel_size_zero_are_the_identity_at_stride_one(
+    backend,
+):
+    """A single-cell window: both the max and the mean of one element are
+    that element, on both ports -- so at stride 1 the output equals the
+    input exactly."""
+    image = _POINTWISE_RNG.standard_normal((1, 9, 8, 2)).astype("float32")
+    mx = backend.run_nhwc(backend.build_maxpool2d(0, 1), image)
+    avg = backend.run_nhwc(backend.build_avgpool2d(0, 1), image)
+    np.testing.assert_allclose(mx, image, atol=1e-5)
+    np.testing.assert_allclose(avg, image, atol=1e-5)
+
+
+@backend_param
+@pytest.mark.parametrize("stride", [1, 2, 3])
+def test_maxpool2d_and_avgpool2d_kernel_size_zero_agree(backend, stride):
+    """Still a single-cell window at any stride, so MaxPool2d and AvgPool2d
+    -- which otherwise compute genuinely different things -- must agree."""
+    image = _POINTWISE_RNG.standard_normal((1, 9, 8, 2)).astype("float32")
+    mx = backend.run_nhwc(backend.build_maxpool2d(0, stride), image)
+    avg = backend.run_nhwc(backend.build_avgpool2d(0, stride), image)
+    np.testing.assert_allclose(mx, avg, atol=1e-5)
+
+
+@backend_param
+@pytest.mark.parametrize("stride", [1, 2, 3])
+def test_conv2d_custom_kernel_with_a_single_sub_kernel_is_pointwise(backend, stride):
+    """A single sub-kernel (hexbase_size = len(sub_kernels) - 1 = 0) reaches
+    the same hexbase_size=0 code path as Conv2d(kernel_size=0), through a
+    different constructor. Previously untested on either port -- and
+    previously broken the same way, since Conv2d_CustomKernel shares
+    HexBase.operation_with_single_hexbase_stride with every other layer."""
+    image = _POINTWISE_RNG.standard_normal((1, 9, 8, 2)).astype("float32")
+    sub_kernels = [np.ones((1, 2, 1, 1), "float32")]  # (out, in, rows=1, cols=1)
+    layer = backend.build_conv2d_custom_kernel(sub_kernels, stride, None)
+    out = backend.run_nhwc(layer, image)[..., 0]
+    possible_sums = image.sum(axis=-1)
+    for value in out.ravel():
+        assert np.any(np.isclose(possible_sums, value, atol=1e-5))
+
+
+# =============================================================================
 # share_neighbors: pure-Python first-principles oracle against real layers.
 # See geometry.py for the parity-probe bug this pins (ring_maps_2d(2) used to
 # classify 4 of 19 taps into the wrong ring).

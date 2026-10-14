@@ -135,6 +135,35 @@ class TestConv2dPatch:
         y_pat = patched.predict(x, verbose=0)
         assert np.max(np.abs(y_ref - y_pat)) < ATOL_KERAS
 
+    @pytest.mark.parametrize("share", [False, True])
+    def test_output_matches_original_with_kernel_size_unit_pixels(self, share):
+        """Regression test: keras_hexagdly.indexed.build_neighbor_table /
+        get_cell_weights used to read layer.kernel_size (the raw,
+        unit-dependent constructor argument) instead of layer.hexbase_size
+        (the resolved ring count) to build the neighbor table consumed here.
+        Before kernel_size_unit existed the two were always equal, so this
+        never surfaced; with kernel_size_unit="pixels" they genuinely
+        differ, and the mismatch made this crash with an IndexError."""
+        layer = hgly.Conv2d(
+            COUT,
+            kernel_size=3,
+            kernel_size_unit="pixels",  # -> 1 ring, same geometry as kernel_size=1 above
+            strides=1,
+            use_bias=False,
+            share_neighbors=share,
+        )
+        model = _build_2d_model(layer)
+        _rand_weights(layer)
+
+        x = RNG.standard_normal((2, H, W, CIN)).astype(np.float32)
+        y_ref = model.predict(x, verbose=0)
+
+        patched = patch_model_for_hls(model)
+        y_pat = patched.predict(x, verbose=0)
+
+        assert y_ref.shape == y_pat.shape
+        assert np.max(np.abs(y_ref - y_pat)) < ATOL_KERAS
+
 
 class TestMaxPool2dPatch:
     @pytest.mark.parametrize("kernel_size", [1, 2])
@@ -153,6 +182,20 @@ class TestMaxPool2dPatch:
         assert np.max(np.abs(y_ref - y_pat)) < 1e-5, (
             f"MaxPool2d(k={kernel_size},s={stride}): max err={np.max(np.abs(y_ref - y_pat)):.2e}"
         )
+
+    def test_output_matches_original_with_kernel_size_unit_pixels(self):
+        """See TestConv2dPatch's version of this test for what it pins."""
+        layer = hgly.MaxPool2d(kernel_size=3, kernel_size_unit="pixels", strides=1)
+        model = _build_2d_model(layer)
+
+        x = RNG.standard_normal((2, H, W, CIN)).astype(np.float32)
+        y_ref = model.predict(x, verbose=0)
+
+        patched = patch_model_for_hls(model)
+        y_pat = patched.predict(x, verbose=0)
+
+        assert y_ref.shape == y_pat.shape
+        assert np.max(np.abs(y_ref - y_pat)) < 1e-5
 
     def test_all_negative_input(self):
         """Border 0-pads dominate for all-negative input — patched must match."""
