@@ -657,8 +657,11 @@ class TestHls4mlCsim:
 
     @pytest.mark.parametrize("kernel_size,cin", [(1, 1), (2, 2), (3, 1)])
     def test_ring_mac_accum_wider_than_weight(self, tmp_path, kernel_size, cin):
-        """The MAC accumulator type must be wider than the weight type by
-        ceil(log2(K*Cin)) bits, so summing the neighbor products cannot overflow.
+        """The MAC accumulator type must hold the sum of K*Cin products weight * input:
+        the integer bits of the weights and of the input, plus ceil(log2(K*Cin)) for the
+        sum, and the finer of the two fractional parts (keras-hexagdly 0.6.0; before, it
+        was the weight type grown by ceil(log2(K*Cin)) bits alone, which overflowed as
+        soon as the activations were larger than about 1).
 
         This is a structural check on the generated config header (reliable —
         it directly asserts the fix), rather than a runtime overflow which is
@@ -705,8 +708,10 @@ class TestHls4mlCsim:
 
         k = len(_cell_list(kernel_size))
         scale = math.ceil(math.log2(k * cin))
-        # weight type is ap_fixed<16,6>; accum must be ap_fixed<16+scale, 6+scale>
-        expected = f"ap_fixed<{16 + scale}, {6 + scale}>"
+        # weights and input are both ap_fixed<16,6> (10 fractional bits): the product needs
+        # 6 + 6 integer bits, the sum scale more
+        integer = 6 + 6 + scale
+        expected = f"ap_fixed<{integer + 10}, {integer}>"
         assert f"typedef {expected} accum_t;" in params_txt, (
             f"expected accum_t {expected} (scale={scale} for K*Cin={k * cin}), "
             f"not found in generated config"
