@@ -16,6 +16,8 @@ not there yet) -- that lives in this package's own
 tests/test_hls4ml_ext_keras.py, single-backed.
 """
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -108,6 +110,15 @@ class _KerasBackend:
 
     def build_avgpool2d(self, kernel_size, stride):
         return self.hgly.AvgPool2d(kernel_size, stride)
+
+    def build_pixels_layers(self, kernel_size):
+        """Conv2d, MaxPool2d and AvgPool2d read in the "pixels" unit."""
+        unit = {"kernel_size_unit": "pixels"}
+        return [
+            self.hgly.Conv2d(2, kernel_size, **unit),
+            self.hgly.MaxPool2d(kernel_size, **unit),
+            self.hgly.AvgPool2d(kernel_size, **unit),
+        ]
 
     def run_nhwc(self, layer, x_nhwc):
         out = layer(self.keras.ops.convert_to_tensor(x_nhwc))
@@ -284,6 +295,15 @@ class _PytorchBackend:
 
     def build_avgpool2d(self, kernel_size, stride):
         return self.hex.AvgPool2d(kernel_size, stride)
+
+    def build_pixels_layers(self, kernel_size):
+        """Conv2d, MaxPool2d and AvgPool2d read in the "pixels" unit."""
+        unit = {"kernel_size_unit": "pixels"}
+        return [
+            self.hex.Conv2d(2, 2, kernel_size, **unit),
+            self.hex.MaxPool2d(kernel_size, **unit),
+            self.hex.AvgPool2d(kernel_size, **unit),
+        ]
 
     def run_nhwc(self, layer, x_nhwc):
         out = layer(self.torch.FloatTensor(self._to_nchw(x_nhwc))).detach().numpy()
@@ -820,6 +840,32 @@ def test_conv2d_custom_kernel_with_a_single_sub_kernel_is_pointwise(backend, str
     possible_sums = image.sum(axis=-1)
     for value in out.ravel():
         assert np.any(np.isclose(possible_sums, value, atol=1e-5))
+
+
+# =============================================================================
+# Even sizes in the "pixels" unit: a hexagonal window is centred on a cell, so
+# it has no even size. Both ports round an even size UP to the next odd one
+# (2 -> 3, the 7-cell window; 4 -> 5, the 19-cell one) and warn, the same way.
+# =============================================================================
+
+
+@backend_param
+@pytest.mark.parametrize("size, rounded, rings", [(2, 3, 1), (4, 5, 2), (6, 7, 3)])
+def test_even_pixels_size_is_rounded_up_and_warns(backend, size, rounded, rings):
+    with pytest.warns(UserWarning, match="no even size") as record:
+        layers = backend.build_pixels_layers(size)
+    assert len(record) == len(layers)
+    for w in record:
+        assert f"the size {size} is rounded up to {rounded}" in str(w.message)
+    assert [layer.hexbase_size for layer in layers] == [rings] * len(layers)
+
+
+@backend_param
+@pytest.mark.parametrize("size", [1, 3, 5])
+def test_odd_pixels_size_does_not_warn(backend, size):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        backend.build_pixels_layers(size)
 
 
 # =============================================================================
