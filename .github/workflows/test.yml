@@ -39,7 +39,7 @@ jobs:
           pip install numpy pytest
           pip install tensorflow-cpu
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install hexagdly hls4ml
+          pip install hexagdly hls4ml "quantizers<2"
           pip install -e ./keras-hexagdly
           pip install -e ./pytorch-hexagdly
 

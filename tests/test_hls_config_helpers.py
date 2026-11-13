@@ -82,7 +82,9 @@ def test_check_flags_known_bad_rtl_combination():
     with warnings.catch_warnings(record=True):
         warnings.simplefilter("always")
         issues = check_hls_config(cfg, model)
-    assert any("Latency" in i and "WRONG RTL" in i for i in issues)
+    # keras-hexagdly 0.7.1: the failure is no longer reproduced, the message asks for
+    # an RTL co-simulation instead of calling the RTL wrong.
+    assert any("Latency" in i and "co-simulation" in i for i in issues)
     assert any("MAC_BLOCK" in i for i in issues)
 
 
@@ -147,24 +149,25 @@ class TestSupportGuards:
     pass C-simulation but are not something to build on. The guards make that
     refusal explicit rather than leaving it to the README."""
 
-    def test_3d_layers_are_refused_by_default(self):
+    def test_3d_layers_need_no_opt_in(self):
+        """keras-hexagdly 0.7.1 exports the 3D layers for io_stream (a depth stage
+        in front of the 2D kernel); allow_unvalidated is accepted and ignored."""
         inp = keras.Input(shape=(4, 8, 8, 2))
-        model = keras.Model(inp, hgly.Conv3d(4, kernel_size=1)(inp))
-        with pytest.raises(NotImplementedError, match="not a validated export path"):
-            patch_model_for_hls(model)
+        for layer in (hgly.Conv3d(4, kernel_size=1), hgly.MaxPool3d(kernel_size=1)):
+            model = keras.Model(inp, layer(inp))
+            assert patch_model_for_hls(model) is not None
+            assert patch_model_for_hls(model, allow_unvalidated=True) is not None
 
-    def test_3d_maxpool_is_refused_too(self):
+    def test_3d_is_refused_under_io_parallel(self):
+        """No 3D kernel there: check_hls_config says so, opt-out or not."""
         inp = keras.Input(shape=(4, 8, 8, 2))
-        model = keras.Model(inp, hgly.MaxPool3d(kernel_size=1)(inp))
-        with pytest.raises(NotImplementedError):
-            patch_model_for_hls(model)
-
-    def test_3d_opt_out_works(self):
-        """The escape hatch has to actually work -- the 3D path passes csim, so
-        refusing it outright would remove usable (if unvalidated) function."""
-        inp = keras.Input(shape=(4, 8, 8, 2))
-        model = keras.Model(inp, hgly.Conv3d(4, kernel_size=1)(inp))
-        assert patch_model_for_hls(model, allow_unvalidated=True) is not None
+        model = patch_model_for_hls(
+            keras.Model(inp, hgly.MaxPool3d(kernel_size=1)(inp))
+        )
+        with pytest.raises(NotImplementedError, match="io_stream"):
+            check_hls_config(
+                {"Model": {}}, model, io_type="io_parallel", allow_unvalidated=True
+            )
 
     def test_2d_is_not_affected(self):
         assert _patched() is not None
@@ -189,10 +192,8 @@ class TestSupportGuards:
         cfg = _sane_config(model)
         assert check_hls_config(cfg, model) == []
 
-    def test_guard_messages_carry_the_measurement(self):
+    def test_guard_messages_say_why(self):
         """Someone hitting these should learn why, not just that."""
-        inp = keras.Input(shape=(4, 8, 8, 2))
-        model = keras.Model(inp, hgly.Conv3d(4, kernel_size=1)(inp))
         with pytest.raises(NotImplementedError) as e:
-            patch_model_for_hls(model)
-        assert "cosimulation" in str(e.value) and "min" in str(e.value)
+            check_hls_config({"Model": {}}, _patched(), io_type="io_parallel")
+        assert "cosimulation" in str(e.value)

@@ -1254,11 +1254,12 @@ def test_minimum_viable_input_size_stride1(backend, kernel_size):
 
 @backend_param
 def test_too_few_rows_for_stride_raises(backend):
-    """The library asserts on inputs too small for the requested stride --
-    verify it fails loudly rather than returning garbage."""
+    """The library refuses inputs too small for the requested stride -- verify it
+    fails loudly rather than returning garbage (an assert in pytorch-hexagdly, a
+    ValueError that names the grid in keras-hexagdly >= 0.7.1)."""
     layer = backend.build_conv2d(1, 1, 1, 4, False, debug=False)
     x = np.random.randn(1, 1, 4, 1).astype(np.float32)  # H=1, way too small
-    with pytest.raises(AssertionError):
+    with pytest.raises((AssertionError, ValueError)):
         backend.run_nhwc(layer, x)
 
 

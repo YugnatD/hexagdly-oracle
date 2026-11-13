@@ -637,6 +637,7 @@ class TestHls4mlCsim:
             backend="Vivado",
             output_dir=_HLS_DIR,
             part=_HLS_PART,
+            io_type="io_stream",  # the only 3D export since keras-hexagdly 0.7.1
         )
         hm.compile()
 
@@ -904,6 +905,12 @@ class TestLineBufferCsim:
         patched = patch_model_for_hls(
             model, strategy="linebuffer", allow_unvalidated=True
         )
+        if io_type == "io_parallel":
+            # keras-hexagdly 0.7.1: a 3D layer is a depth stage in front of the 2D
+            # stream kernel; there is no io_parallel 3D kernel any more.
+            with pytest.raises(NotImplementedError, match="io_stream only"):
+                _csim(patched, x, io_type=io_type)
+            return
         y_hls = _csim(patched, x, io_type=io_type).reshape(-1)
         assert np.max(np.abs(y_hls - y_ref)) < ATOL_CSIM, (
             f"Conv3d linebuffer {io_type} dpad={depth_padding}: "
@@ -984,12 +991,16 @@ class TestMaxPoolLineBuffer:
             f"max err={np.max(np.abs(y_ref - y_pat)):.2e}"
         )
 
-    def test_maxpool3d_hex_stride2_raises(self):
-        """MaxPool3d linebuffer is hex-stride 1 only."""
+    def test_maxpool3d_hex_stride2_matches(self):
+        """A hex stride on a MaxPool3d used to be refused; keras-hexagdly 0.7.1
+        exports it (depth stage + the 2D pooling layer, which has strides)."""
         layer = hgly.MaxPool3d(kernel_size=(1, 1), strides=(1, 2))
         model = _build_3d_model(layer)
-        with pytest.raises(NotImplementedError, match="strides=1 only"):
-            patch_model_for_hls(model, strategy="linebuffer", allow_unvalidated=True)
+        patched = patch_model_for_hls(model, strategy="linebuffer")
+        x = RNG.standard_normal((2, D, H, W, CIN)).astype(np.float32)
+        np.testing.assert_allclose(
+            patched.predict(x, verbose=0), model.predict(x, verbose=0), atol=1e-6
+        )
 
 
 @jax_skip
@@ -1161,6 +1172,12 @@ class TestLineBufferPoolAndStrideCsim:
         patched = patch_model_for_hls(
             model, strategy="linebuffer", allow_unvalidated=True
         )
+        if io_type == "io_parallel":
+            # keras-hexagdly 0.7.1: a 3D layer is a depth stage in front of the 2D
+            # stream kernel; there is no io_parallel 3D kernel any more.
+            with pytest.raises(NotImplementedError, match="io_stream only"):
+                _csim(patched, x, io_type=io_type)
+            return
         y_hls = _csim(patched, x, io_type=io_type).reshape(-1)
         assert np.max(np.abs(y_hls - y_ref)) < ATOL_CSIM
 
